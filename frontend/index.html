@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bitcoin Price - Live Table</title>
+    <style>
+        body { background: #ffffff; margin: 0; padding: 12px; }
+        .mono { font-family: 'Courier New', monospace; }
+        .header { font-size: 18px; color: #222; margin-bottom: 6px; }
+        .status { font-size: 12px; color: #666; margin-bottom: 8px; }
+        .layout { display: grid; grid-template-columns: 33% 1fr; gap: 12px; height: calc(100vh - 60px); }
+        .left { min-width: 280px; display: flex; flex-direction: column; overflow: hidden; }
+        .feed { flex: 1; overflow: auto; border: 1px solid #e5e7eb; }
+        table { width: 100%; border-collapse: collapse; }
+        thead th { position: sticky; top: 0; background: #fff; border-bottom: 2px solid #222; padding: 6px; text-align: left; font-size: 13px; }
+        tbody td { border-bottom: 1px solid #e5e7eb; padding: 5px 6px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        tr.newest td { background: #fafafa; }
+        .up { color: #16a34a; }
+        .down { color: #dc2626; }
+        .flat { color: #111827; }
+        .col-time { width: 88px; }
+        .col-price { width: 100px; }
+        .col-move { width: 84px; }
+        .col-pct { width: 70px; }
+        .right { position: relative; border: 1px solid #e5e7eb; height: 100%; }
+        .controls { position: absolute; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+        .btn { font-family: 'Courier New', monospace; font-size: 12px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; background: #f9fafb; color: #111827; cursor: pointer; }
+        .btn.active { background: #111827; color: #fff; border-color: #111827; }
+        #chartDiv { position: absolute; top: 36px; left: 0; right: 0; bottom: 0; }
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Removed restrictive CSP to allow CDN scripts (Chart.js). Add stricter CSP later if needed. -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="charset" content="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+</head>
+<body class="mono">
+    <div class="header">BINANCE:BTCUSDT - Live Feed</div>
+    <div class="status" id="status">Connecting...</div>
+    <div class="layout">
+        <div class="left">
+            <div class="feed">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="mono col-time">Time</th>
+                            <th class="mono col-price">Price</th>
+                            <th class="mono col-move">Move</th>
+                            <th class="mono col-pct">%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="right">
+            <div class="controls">
+                <button class="btn" data-range="1h">1H</button>
+                <button class="btn" data-range="1d">1D</button>
+                <button class="btn" data-range="1w">1W</button>
+                <button class="btn" data-range="1m">1M</button>
+                <button class="btn" data-range="1y">1Y</button>
+            </div>
+            <div id="chartDiv"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script>
+        window.addEventListener('load', () => {
+        const TICKER = 'BINANCE:BTCUSDT';
+        const tbody = document.getElementById('tbody');
+        const statusEl = document.getElementById('status');
+        let chart, candleSeries, lineSeries;
+        let lastPrice = null;
+        let currentRange = '1h';
+        let resolutionSec = 60; // default 1 minute
+        let chartType = 'candle'; // 'candle' or 'line'
+        const MAX_ROWS = 300;
+        const candleBuckets = new Map(); // bucket -> candle
+
+        function shortTime(ts) {
+            try { return new Date(ts.replace(' ', 'T')).toLocaleTimeString([], { hour12: false }).slice(0,8); } catch { return ''; }
+        }
+
+        function addRow(d) {
+            if (d.price == null) return;
+            const tr = document.createElement('tr');
+            const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
+            tr.className = 'newest';
+            const ts = shortTime(d.timestamp || '');
+            const price = Number(d.price).toFixed(2);
+            const move = d.delta == null ? '' : `${d.delta >= 0 ? '+' : ''}${Number(d.delta).toFixed(2)}`;
+            const pct = d.percent_change == null ? '' : `${d.percent_change >= 0 ? '+' : ''}${Number(d.percent_change).toFixed(2)}%`;
+            tr.innerHTML = `<td class="mono">${ts}</td><td class="mono">$${price}</td><td class="mono ${direction}">${move}</td><td class="mono ${direction}">${pct}</td>`;
+            if (tbody.firstChild) { tbody.firstChild.classList.remove('newest'); tbody.insertBefore(tr, tbody.firstChild); } else { tbody.appendChild(tr); }
+            while (tbody.children.length > MAX_ROWS) tbody.removeChild(tbody.lastChild);
+        }
+
+        function ensureChart() {
+            if (chart) {
+                // Update time scale for current range
+                chart.applyOptions({
+                    timeScale: { 
+                        borderColor: '#e5e7eb', 
+                        timeVisible: true, 
+                        secondsVisible: currentRange === '1h',
+                        rightOffset: currentRange === '1h' ? 5 : 20
+                    }
+                });
+                return;
+            }
+            const div = document.getElementById('chartDiv');
+            chart = LightweightCharts.createChart(div, {
+                width: div.clientWidth,
+                height: div.clientHeight,
+                layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#111827', fontFamily: 'Courier New' },
+                grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
+                rightPriceScale: { borderColor: '#e5e7eb' },
+                timeScale: { 
+                    borderColor: '#e5e7eb', 
+                    timeVisible: true, 
+                    secondsVisible: currentRange === '1h',
+                    rightOffset: currentRange === '1h' ? 5 : 20
+                },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
+            });
+            window.addEventListener('resize', () => { chart.applyOptions({ width: div.clientWidth, height: div.clientHeight }); });
+        }
+
+        function getRangeParams(range) {
+            switch (range) {
+                case '1h': return { minutes: 60, resolution: '1', resSec: 60, type: 'candle' };
+                case '1d': return { minutes: 24 * 60, resolution: '5', resSec: 300, type: 'candle' };
+                case '1w': return { minutes: 7 * 24 * 60, resolution: '30', resSec: 1800, type: 'line' };
+                case '1m': return { minutes: 30 * 24 * 60, resolution: '60', resSec: 3600, type: 'line' };
+                case '1y': return { minutes: 365 * 24 * 60, resolution: 'D', resSec: 86400, type: 'line' };
+                default: return { minutes: 60, resolution: '1', resSec: 60, type: 'candle' };
+            }
+        }
+
+        function setHistory(data, resSec, type) {
+            ensureChart();
+            candleBuckets.clear();
+            
+            // Remove existing series
+            if (candleSeries) {
+                chart.removeSeries(candleSeries);
+                candleSeries = null;
+            }
+            if (lineSeries) {
+                chart.removeSeries(lineSeries);
+                lineSeries = null;
+            }
+            
+            let candles = [];
+            if (data && Array.isArray(data.candles) && data.candles.length > 0) {
+                candles = data.candles.map(c => ({ time: c.t, open: c.o, high: c.h, low: c.l, close: c.c }));
+            } else if (data && Array.isArray(data.points)) {
+                candles = data.points.map(pt => { const p = Number(pt.p); return { time: Math.floor(new Date(pt.t).getTime()/1000), open: p, high: p, low: p, close: p }; });
+            }
+            candles.sort((a,b)=>a.time-b.time);
+            
+            if (type === 'line') {
+                // Use line chart for longer timeframes
+                lineSeries = chart.addLineSeries({ 
+                    color: '#2563eb', 
+                    lineWidth: 2,
+                    priceLineVisible: false
+                });
+                const lineData = candles.map(c => ({ time: c.time, value: c.close }));
+                lineSeries.setData(lineData);
+                chartType = 'line';
+            } else {
+                // Use candlestick chart for shorter timeframes
+                candleSeries = chart.addCandlestickSeries({ 
+                    upColor: '#16a34a', 
+                    downColor: '#dc2626', 
+                    borderDownColor: '#dc2626', 
+                    borderUpColor: '#16a34a', 
+                    wickDownColor: '#dc2626', 
+                    wickUpColor: '#16a34a' 
+                });
+                candleSeries.setData(candles);
+                chartType = 'candle';
+                for (const c of candles) candleBuckets.set(c.time - (c.time % resSec), c);
+            }
+        }
+
+        function updateLive(price, isoTs) {
+            if (chartType === 'line') {
+                // For line charts, just update the last point
+                if (lineSeries) {
+                    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
+                    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
+                    lineSeries.update({ time: bucket, value: Number(price) });
+                }
+                return;
+            }
+            
+            // For candlestick charts, update the current candle
+            if (!candleSeries) return;
+            ensureChart();
+            const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
+            const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
+            const p = Number(price);
+            let c = candleBuckets.get(bucket);
+            if (!c) {
+                c = { time: bucket, open: p, high: p, low: p, close: p };
+                candleBuckets.set(bucket, c);
+            } else {
+                if (p > c.high) c.high = p;
+                if (p < c.low) c.low = p;
+                c.close = p;
+            }
+            candleSeries.update(c);
+        }
+
+        async function loadHistory(range='1h') {
+            try {
+                currentRange = range;
+                const { minutes, resolution, resSec, type } = getRangeParams(range);
+                resolutionSec = resSec;
+                const url = `http://localhost:8000/api/history?minutes=${minutes}&resolution=${encodeURIComponent(resolution)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                setHistory(data, resolutionSec, type);
+            } catch (e) { /* ignore */ }
+        }
+
+        function poll() {
+            fetch('http://localhost:8000/api/price', { method: 'GET', mode: 'cors' })
+                .then(r => r.json())
+                .then(d => {
+                    statusEl.textContent = 'Connected - Live';
+                    statusEl.style.color = 'green';
+                    if (lastPrice === null || d.price !== lastPrice) {
+                        addRow(d);
+                        lastPrice = d.price;
+                        updateLive(d.price, d.timestamp);
+                    }
+                })
+                .catch(() => {
+                    statusEl.textContent = 'Disconnected - retrying...';
+                    statusEl.style.color = 'red';
+                });
+        }
+
+        // Init
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                await loadHistory(btn.dataset.range);
+            });
+        });
+
+        loadHistory('1h');
+        poll();
+        setInterval(poll, 1000);
+        loadHistory('1h');
+        poll();
+        setInterval(poll, 1000);
+        });
+    </script>
+</body>
+</html>
