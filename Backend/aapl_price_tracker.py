@@ -12,7 +12,7 @@ import ssl
 import requests
 import random
 from typing import Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,9 +101,12 @@ async def get_cryptos():
 
 # FastAPI endpoint to change crypto
 @app.post("/api/change-crypto")
-async def change_crypto(crypto_data: dict):
+async def change_crypto(request: Request):
     """Change the current cryptocurrency"""
+
+
     global current_ticker, current_crypto_name
+    crypto_data = await request.json()
     crypto_name = crypto_data.get("crypto")
     if crypto_name in CRYPTO_TICKERS:
         current_ticker = CRYPTO_TICKERS[crypto_name]
