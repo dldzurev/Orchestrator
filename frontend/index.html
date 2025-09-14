@@ -1410,10 +1410,11 @@ async function runPLForRow(row){
   const runBtn = row.querySelector('.bt-run');
   if (!s || !plCell || !runBtn) return;
 
-  // Disable button and show activity
   runBtn.disabled = true;
   const prevText = runBtn.textContent;
   runBtn.textContent = 'Running…';
+  plCell.textContent = '…';
+  plCell.removeAttribute('style');
 
   const payload = {
     coin: (s.coins && s.coins[0]) || 'Bitcoin',
@@ -1430,22 +1431,28 @@ async function runPLForRow(row){
       body: JSON.stringify(payload)
     });
     const data = await res.json();
+
     if (data && typeof data.pl_pct === 'number'){
       const v = Number(data.pl_pct);
       plCell.textContent = `${v.toFixed(2)}%`;
       plCell.style.color = v >= 0 ? '#16a34a' : '#dc2626';
+      plCell.title = '';
     } else {
-      plCell.textContent = '—';
+      const reason = (data && data.reason) ? String(data.reason) : 'error';
+      plCell.textContent = `— (${reason})`;
+      plCell.title = `Backtest failed: ${reason}`;
       plCell.removeAttribute('style');
     }
   } catch (e) {
-    plCell.textContent = '—';
+    plCell.textContent = '— (network)';
+    plCell.title = 'Network error calling /api/backtest';
     plCell.removeAttribute('style');
   } finally {
     runBtn.disabled = false;
     runBtn.textContent = prevText;
   }
 }
+
 
 async function computePLForRows(){
   const rows = tbody.querySelectorAll('tr[data-id]');

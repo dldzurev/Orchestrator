@@ -356,25 +356,19 @@ async def get_history(minutes: int = 60, resolution: str = "1"):
         )
         data["source"] = "fallback"
         return JSONResponse(content=data)
-
 @app.post("/api/backtest")
 async def backtest_pl(request: Request):
     """
-    Compute simple P/L% for one strategy by fetching historical candles from Finnhub.
-    Assumptions:
-      - Use first coin only
-      - Indicator condition means: indicator >= value
-      - Buy at first bar meeting all buy conditions; sell at first later bar meeting all sell conditions
-      - 60-minute candles
-    Body:
-      {
-        "coin": "Bitcoin",        # or "coins": ["Bitcoin", ...]
-        "buy":  [ { "key":"price","value":50000 }, ... ],
-        "sell": [ { "key":"price","value":52000 }, ... ],
-        "start": "2025-09-10T12:00:00Z",
-        "end":   "2025-09-12T12:00:00Z"
-      }
-    Resp: { "pl_pct": 3.21 } or { "pl_pct": None, "reason": "..." }
+    Backtest P/L% with:
+      - Finnhub candles (multi-resolution) or synthetic fallback for same window
+      - Key normalization (price/ema/bb/zscore/rv)
+      - Direction inference for SELL (profit target vs stop)
+      - Threshold normalization:
+          * For price-like keys (price, ema12/26, bb bands):
+            If median price >= 1000 and |thr| <= 100, interpret thr as PERCENT
+            (e.g., 2 => +2% target; -2 => -2% stop)
+          * Otherwise treat as absolute
+      - 'Edge' fallback for levels to avoid always-true-on-first-bar
     """
     import math
     from datetime import datetime as _dt
@@ -389,14 +383,18 @@ async def backtest_pl(request: Request):
     end_iso = body.get("end")
 
     if not coin:
-        return JSONResponse({"pl_pct": None, "reason": "no coin"}, status_code=400)
+        return JSONResponse({"pl_pct": None, "reason": "no_coin"}, status_code=400)
     symbol = CRYPTO_TICKERS.get(coin)
     if not symbol:
-        return JSONResponse({"pl_pct": None, "reason": f"unsupported coin {coin}"}, status_code=400)
+        return JSONResponse({"pl_pct": None, "reason": f"unsupported_coin:{coin}"}, status_code=400)
     if not start_iso or not end_iso:
-        return JSONResponse({"pl_pct": None, "reason": "missing start/end"}, status_code=400)
+        return JSONResponse({"pl_pct": None, "reason": "missing_start_end"}, status_code=400)
+    if len(buy_conds) == 0:
+        return JSONResponse({"pl_pct": None, "reason": "no_buy_conditions"}, status_code=200)
+    if len(sell_conds) == 0:
+        return JSONResponse({"pl_pct": None, "reason": "no_sell_conditions"}, status_code=200)
 
-    # Parse ISO to unix seconds
+    # ISO → unix seconds
     def _parse_iso(s: str) -> int:
         s = s.replace("Z", "+00:00")
         dt = _dt.fromisoformat(s)
@@ -407,19 +405,50 @@ async def backtest_pl(request: Request):
     if end_ts <= start_ts:
         return JSONResponse({"pl_pct": None, "reason": "end<=start"}, status_code=400)
 
-    # Fixed 60-min resolution for simplicity
-    resolution = "60"
-    try:
-        resp = finnhub_client.crypto_candles(symbol, resolution, start_ts, end_ts)
-    except Exception as e:
-        ts = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_line(f"[{ts}] backtest candles error: {e}")
-        return JSONResponse({"pl_pct": None, "reason": "finnhub error"}, status_code=500)
+    # Finnhub candles with fallback to synthetic
+    _RES_ORDER = [("60", 3600), ("30", 1800), ("5", 300), ("1", 60)]
+    resp = None
+    used_sec = None
+    for res, sec in _RES_ORDER:
+        try:
+            r = finnhub_client.crypto_candles(symbol, res, start_ts, end_ts)
+            if isinstance(r, dict) and r.get("s") == "ok" and r.get("t"):
+                resp = r
+                used_sec = sec
+                break
+        except Exception as e:
+            ts = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_line(f"[{ts}] backtest candles error (res={res}): {e}")
 
-    if not isinstance(resp, dict) or resp.get("s") != "ok":
-        return JSONResponse({"pl_pct": None, "reason": "no_data"}, status_code=200)
+    source_used = "finnhub"
+    if resp is None:
+        source_used = "sample"
+        minutes = max(1, int((end_ts - start_ts) // 60))
+        if minutes > 24*60:
+            res_choice, used_sec = "60", 3600
+        elif minutes > 6*60:
+            res_choice, used_sec = "30", 1800
+        elif minutes > 60:
+            res_choice, used_sec = "5", 300
+        else:
+            res_choice, used_sec = "1", 60
 
-    # Build dataframe
+        sample = _generate_sample_candles(
+            minutes=minutes,
+            resolution=res_choice,
+            seed=(start_ts % 100_000),
+            crypto_name=coin
+        )
+        resp = {
+            "s": "ok",
+            "t": [c["t"] for c in sample["candles"]],
+            "o": [c["o"] for c in sample["candles"]],
+            "h": [c["h"] for c in sample["candles"]],
+            "l": [c["l"] for c in sample["candles"]],
+            "c": [c["c"] for c in sample["candles"]],
+        }
+
+    # Build DF
     t = resp.get("t", [])
     o = resp.get("o", [])
     h = resp.get("h", [])
@@ -441,7 +470,7 @@ async def backtest_pl(request: Request):
 
     prices = df["close"].astype(float)
 
-    # Indicators (match frontend math)
+    # Indicators (aligned with frontend)
     ema12 = prices.ewm(span=12, adjust=False).mean()
     ema26 = prices.ewm(span=26, adjust=False).mean()
     sma20 = prices.rolling(window=20).mean()
@@ -449,16 +478,30 @@ async def backtest_pl(request: Request):
     bb_upper = sma20 + 2 * std20
     bb_lower = sma20 - 2 * std20
 
-    # z-score of log returns (20)
     logret = _np.log(prices / prices.shift(1))
     zr_mean = logret.rolling(20).mean()
     zr_std  = logret.rolling(20).std().replace(0.0, _np.nan)
     zscore  = (logret - zr_mean) / zr_std
 
-    # realized vol annualized (20) using fixed 60-min cadence
     seconds_per_year = 365 * 24 * 3600
-    periods_per_year = seconds_per_year / (60 * 60)
+    cadence_sec = used_sec or 3600
+    periods_per_year = seconds_per_year / cadence_sec
     rv = logret.rolling(20).std() * math.sqrt(periods_per_year)
+
+    # Key normalization
+    def _canon(k: str):
+        if not k: return None
+        s = str(k).strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+        aliases = {
+            "price": "price", "close": "price",
+            "ema12": "ema12", "ema012": "ema12",
+            "ema26": "ema26", "ema026": "ema26",
+            "bbupper": "bb_upper", "bbupperband": "bb_upper",
+            "bblower": "bb_lower", "bblowerband": "bb_lower",
+            "zscore": "zscore",
+            "rv": "rv", "realizedvol": "rv", "realisedvol": "rv",
+        }
+        return aliases.get(s)
 
     series_map = {
         "price": prices,
@@ -470,45 +513,169 @@ async def backtest_pl(request: Request):
         "rv": rv,
     }
 
-    def _meets(row_idx, conds):
-        # all indicators >= value at this index
+    price_like = {"price", "ema12", "ema26", "bb_upper", "bb_lower"}
+    median_price = float(prices.median()) if len(prices) else 0.0
+
+    # SELL direction inference: compare sell vs buy for same key
+    buy_thr_map_raw = {}
+    for cond in buy_conds:
+        k = _canon(cond.get("key"))
+        v = cond.get("value")
+        if k is not None and v is not None:
+            try:
+                buy_thr_map_raw[k] = float(v)
+            except Exception:
+                pass
+
+    def _sell_mode_for_key(key, sell_thr):
+        try:
+            st = float(sell_thr)
+        except Exception:
+            return "up"
+        b = buy_thr_map_raw.get(key)
+        if b is None:
+            return "up"
+        return "up" if st >= b else "down"
+
+    # Normalize thresholds to absolute numbers appropriate for the series scale
+    def _norm_thr(key, thr, mode):
+        """Convert % → absolute when appropriate; keep absolute otherwise."""
+        if thr is None:
+            return None
+        try:
+            x = float(thr)
+        except Exception:
+            return None
+        if key in price_like and median_price >= 1000 and abs(x) <= 100:
+            # treat as percent around the median price
+            if mode == "up":
+                return median_price * (1.0 + x / 100.0)
+            else:
+                return median_price * (1.0 - abs(x) / 100.0)
+        return x
+
+    # Helpers
+    def _get_val(key, idx):
+        ser = series_map.get(key)
+        if ser is None: return None
+        v = ser.iloc[idx]
+        if _pd.isna(v) or not _np.isfinite(v): return None
+        return float(v)
+
+    def _cross_up(idx, key, thr):
+        if idx <= 0: return False
+        v_prev = _get_val(key, idx-1); v_now = _get_val(key, idx)
+        if v_prev is None or v_now is None: return False
+        return (v_prev < thr) and (v_now >= thr)
+
+    def _cross_down(idx, key, thr):
+        if idx <= 0: return False
+        v_prev = _get_val(key, idx-1); v_now = _get_val(key, idx)
+        if v_prev is None or v_now is None: return False
+        return (v_prev > thr) and (v_now <= thr)
+
+    def _level_ge(idx, key, thr):
+        v = _get_val(key, idx)
+        return (v is not None) and (v >= thr)
+
+    def _level_le(idx, key, thr):
+        v = _get_val(key, idx)
+        return (v is not None) and (v <= thr)
+
+    # 'Edge' versions of level checks to avoid always-true-from-first-bar
+    def _edge_ge(idx, key, thr):
+        if idx == 0:
+            return _level_ge(0, key, thr)
+        return (not _level_ge(idx-1, key, thr)) and _level_ge(idx, key, thr)
+
+    def _edge_le(idx, key, thr):
+        if idx == 0:
+            return _level_le(0, key, thr)
+        return (not _level_le(idx-1, key, thr)) and _level_le(idx, key, thr)
+
+    def _all_buy_cross_up(i, conds):
+        if not conds: return False
         for cond in conds:
-            key = cond.get("key")
-            thr = cond.get("value")
-            if key not in series_map or thr is None:
-                return False
-            val = series_map[key].iloc[row_idx]
-            if _pd.isna(val) or not _np.isfinite(val):
-                return False
-            if float(val) < float(thr):
-                return False
+            raw = cond.get("value")
+            key = _canon(cond.get("key"))
+            if key is None or raw is None: return False
+            thr = _norm_thr(key, raw, "up")
+            if thr is None or not _cross_up(i, key, thr): return False
         return True
 
+    def _all_buy_edge_ge(i, conds):
+        if not conds: return False
+        for cond in conds:
+            raw = cond.get("value")
+            key = _canon(cond.get("key"))
+            if key is None or raw is None: return False
+            thr = _norm_thr(key, raw, "up")
+            if thr is None or not _edge_ge(i, key, thr): return False
+        return True
+
+    def _all_sell_cross(i, conds):
+        if not conds: return False
+        for cond in conds:
+            raw = cond.get("value")
+            key = _canon(cond.get("key"))
+            if key is None or raw is None: return False
+            mode = _sell_mode_for_key(key, raw)
+            thr = _norm_thr(key, raw, mode)
+            if thr is None: return False
+            ok = _cross_up(i, key, thr) if mode == "up" else _cross_down(i, key, thr)
+            if not ok: return False
+        return True
+
+    def _all_sell_edge(i, conds):
+        if not conds: return False
+        for cond in conds:
+            raw = cond.get("value")
+            key = _canon(cond.get("key"))
+            if key is None or raw is None: return False
+            mode = _sell_mode_for_key(key, raw)
+            thr = _norm_thr(key, raw, mode)
+            if thr is None: return False
+            ok = _edge_ge(i, key, thr) if mode == "up" else _edge_le(i, key, thr)
+            if not ok: return False
+        return True
+
+    # BUY: cross-up first, then edge-based >= fallback
     buy_idx = None
-    for i in range(len(df)):
-        if _meets(i, buy_conds):
+    for i in range(1, len(df)):
+        if _all_buy_cross_up(i, buy_conds):
             buy_idx = i
             break
-
     if buy_idx is None:
-        return JSONResponse({"pl_pct": None, "reason": "no_buy_trigger"}, status_code=200)
+        for i in range(len(df)):
+            if _all_buy_edge_ge(i, buy_conds):
+                buy_idx = i
+                break
+    if buy_idx is None:
+        return JSONResponse({"pl_pct": None, "reason": "no_buy_trigger", "source": source_used}, status_code=200)
 
+    # SELL: inferred direction; cross first, then edge-based fallback
     sell_idx = None
-    for j in range(buy_idx + 1, len(df)):
-        if _meets(j, sell_conds):
+    for j in range(max(buy_idx + 1, 1), len(df)):
+        if _all_sell_cross(j, sell_conds):
             sell_idx = j
             break
-
     if sell_idx is None:
-        return JSONResponse({"pl_pct": None, "reason": "no_sell_trigger"}, status_code=200)
+        for j in range(buy_idx + 1, len(df)):
+            if _all_sell_edge(j, sell_conds):
+                sell_idx = j
+                break
+    if sell_idx is None:
+        return JSONResponse({"pl_pct": None, "reason": "no_sell_trigger", "source": source_used}, status_code=200)
 
     buy_price = float(prices.iloc[buy_idx])
     sell_price = float(prices.iloc[sell_idx])
     if buy_price <= 0:
-        return JSONResponse({"pl_pct": None, "reason": "bad_buy_price"}, status_code=200)
+        return JSONResponse({"pl_pct": None, "reason": "bad_buy_price", "source": source_used}, status_code=200)
 
     pl_pct = (sell_price - buy_price) / buy_price * 100.0
-    return JSONResponse({"pl_pct": pl_pct})
+    return JSONResponse({"pl_pct": pl_pct, "source": source_used})
+
+
 
 # -----------------------------
 # WebSocket streaming to Finnhub
