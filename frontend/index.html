@@ -743,18 +743,29 @@
   }
 
   async function pollPriceOnce() {
-    try {
-      const res = await fetch('http://localhost:8000/api/price');
-      const d = await res.json();
-      document.getElementById('status').textContent = 'Connected - Live';
-      document.getElementById('status').style.color = 'green';
-      addRow(d);
-      updateLive(d.price, d.timestamp);
-    } catch(e) {
-      document.getElementById('status').textContent = 'Disconnected - retrying...';
-      document.getElementById('status').style.color = 'red';
-    }
+  let d;
+  // Only treat network/JSON failures as "Disconnected"
+  try {
+    const res = await fetch('http://localhost:8000/api/price', { cache: 'no-store' });
+    d = await res.json();
+  } catch (_) {
+    const s = document.getElementById('status');
+    if (s) { s.textContent = 'Disconnected - retrying...'; s.style.color = 'red'; }
+    return;
   }
+
+  // If we got here, the network is fine
+  const s = document.getElementById('status');
+  if (s) { s.textContent = 'Connected - Live'; s.style.color = 'green'; }
+
+  // Never let render issues flip the status or break the loop
+  try { addRow(d); } catch (_) { /* ignore UI errors */ }
+  try {
+    if (d && d.price != null && d.timestamp) {
+      updateLive(d.price, d.timestamp);
+    }
+  } catch (_) { /* ignore UI errors */ }
+}
 
   async function loadHistory(range='1h') {
     try {
@@ -775,51 +786,68 @@
   });
 
   function addRow(d) {
-    if (!d || d.price == null) return;
-    const tbody = document.getElementById('tbody');
-    const tr = document.createElement('tr');
+  if (!d || d.price == null) return;
 
-    const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
-    const priceClass = direction === 'up' ? 'price-up' : (direction === 'down' ? 'price-down' : '');
+  const tbody = document.getElementById('tbody');
+  const tr = document.createElement('tr');
 
-    const ts = new Date((d.timestamp || '').replace(' ', 'T')).toLocaleTimeString([], { hour12: false });
-    const price = Number(d.price).toFixed(2);
-    const move = d.delta == null ? '' : `${d.delta >= 0 ? '+' : ''}${Number(d.delta).toFixed(2)}`;
-    const pct = d.percent_change == null ? '' : `${d.percent_change >= 0 ? '+' : ''}${Number(d.percent_change).toFixed(2)}%`;
+  const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
+  const priceClass = direction === 'up' ? 'price-up' : (direction === 'down' ? 'price-down' : '');
 
-    tr.className = 'newest';
-    tr.innerHTML = `<td class="mono">${ts}</td>
-                    <td class="mono ${priceClass}">$${price}</td>
-                    <td class="mono ${direction}">${move}</td>
-                    <td class="mono ${direction}">${pct}</td>`;
-
-    if (tbody.firstChild) { tbody.firstChild.classList.remove('newest'); tbody.insertBefore(tr, tbody.firstChild); }
-    else { tbody.appendChild(tr); }
-
-    while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
-  }
-
-  function updateLive(price, isoTs) {
-    if (!candleSeries) return;
-    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
-    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
-    const p = Number(price);
-    let c = candleBuckets.get(bucket);
-    if (!c) {
-      c = { time: bucket, open: p, high: p, low: p, close: p };
-      candleBuckets.set(bucket, c);
-      currentCandles.push(c);
-      candleSeries.update(c);
-    } else {
-      c.high = Math.max(c.high, p);
-      c.low = Math.min(c.low, p);
-      c.close = p;
-      candleSeries.update(c);
-      const idx = currentCandles.findIndex(cc => cc.time === c.time);
-      if (idx >= 0) currentCandles[idx] = c;
+  // Safely format time only if timestamp is present and valid
+  let tsStr = '';
+  if (d.timestamp && typeof d.timestamp === 'string') {
+    const iso = d.timestamp.includes('T') ? d.timestamp : d.timestamp.replace(' ', 'T');
+    const dt = new Date(iso);
+    if (!isNaN(dt.getTime())) {
+      tsStr = dt.toLocaleTimeString([], { hour12: false });
     }
-    try { computeAndRenderIndicatorsFromCandles(); } catch (err) { console.warn('indicator recompute error', err); }
   }
+
+  const price = Number(d.price).toFixed(2);
+  const move  = d.delta == null ? '' : `${d.delta >= 0 ? '+' : ''}${Number(d.delta).toFixed(2)}`;
+  const pct   = d.percent_change == null ? '' : `${d.percent_change >= 0 ? '+' : ''}${Number(d.percent_change).toFixed(2)}%`;
+
+  tr.className = 'newest';
+  tr.innerHTML = `<td class="mono">${tsStr}</td>
+                  <td class="mono ${priceClass}">$${price}</td>
+                  <td class="mono ${direction}">${move}</td>
+                  <td class="mono ${direction}">${pct}</td>`;
+
+  if (tbody.firstChild) { tbody.firstChild.classList.remove('newest'); tbody.insertBefore(tr, tbody.firstChild); }
+  else { tbody.appendChild(tr); }
+
+  while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
+}
+
+function updateLive(price, isoTs) {
+  if (!candleSeries || price == null || !isoTs || typeof isoTs !== 'string') return;
+
+  const iso = isoTs.includes('T') ? isoTs : isoTs.replace(' ', 'T');
+  const ms  = Date.parse(iso);
+  if (!isFinite(ms)) return;
+
+  const tsSec  = Math.floor(ms / 1000);
+  const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
+  const p = Number(price);
+
+  let c = candleBuckets.get(bucket);
+  if (!c) {
+    c = { time: bucket, open: p, high: p, low: p, close: p };
+    candleBuckets.set(bucket, c);
+    currentCandles.push(c);
+    candleSeries.update(c);
+  } else {
+    c.high = Math.max(c.high, p);
+    c.low  = Math.min(c.low,  p);
+    c.close = p;
+    candleSeries.update(c);
+    const idx = currentCandles.findIndex(cc => cc.time === c.time);
+    if (idx >= 0) currentCandles[idx] = c;
+  }
+
+  try { computeAndRenderIndicatorsFromCandles(); } catch (err) { /* no-op */ }
+}
 
   // init viewer
   ensureChart();
@@ -1373,21 +1401,98 @@
 
     if (!tbody) return; // backtest screen not in DOM yet
 
-    function showDetail(s){
-      if (!s) return;
-      dtitle.textContent = `Strategy #${s.id} details`;
-      dbody.innerHTML = `
-        <div class="kv"><strong>Coins:</strong> ${s.coins.join(', ') || '--'}</div>
-        <div class="kv"><strong>Buy:</strong> ${s.buy.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
-        <div class="kv"><strong>Sell:</strong> ${s.sell.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
-        <div class="kv"><strong>Mode:</strong> ${s.schedule.mode}</div>
-        <div class="kv"><strong>Start:</strong> ${s.schedule.start ? new Date(s.schedule.start).toLocaleString() : '--'}</div>
-        <div class="kv"><strong>End:</strong> ${s.schedule.end ? new Date(s.schedule.end).toLocaleString() : '--'}</div>
-        <hr>
-        <p>Random notes: backtest engine wiring TBD. Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-      `;
-      detail.hidden = false;
+    async function showDetail(s){
+  if (!s) return;
+  dtitle.textContent = `Strategy #${s.id} details`;
+  detail.hidden = false;
+
+  // Basic info while we fetch
+  dbody.innerHTML = `
+    <div class="kv"><strong>Coins:</strong> ${s.coins.join(', ') || '--'}</div>
+    <div class="kv"><strong>Buy:</strong> ${s.buy.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+    <div class="kv"><strong>Sell:</strong> ${s.sell.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+    <div class="kv"><strong>Mode:</strong> ${s.schedule.mode}</div>
+    <div class="kv"><strong>Start:</strong> ${s.schedule.start ? new Date(s.schedule.start).toLocaleString() : '--'}</div>
+    <div class="kv"><strong>End:</strong> ${s.schedule.end ? new Date(s.schedule.end).toLocaleString() : '--'}</div>
+    <hr>
+    <div>Loading trades…</div>
+  `;
+
+  // Build payload identical to Run
+  const payload = {
+    coin: (s.coins && s.coins[0]) || 'Bitcoin',
+    buy:  s.buy || [],
+    sell: s.sell || [],
+    start: s.schedule?.start || null,
+    end:   s.schedule?.end   || null
+  };
+
+  // Helpers for formatting
+  const fmtMoney = (x) => (x == null ? '--' : ('$' + Number(x).toFixed(2)));
+  const fmtNum   = (x, dp=4) => (x == null || !isFinite(x) ? '--' : Number(x).toFixed(dp));
+  const fmtTime  = (iso) => (iso ? new Date(iso).toLocaleString() : '--');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  try{
+    const res = await fetch('http://localhost:8000/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!data || typeof data.pl_pct !== 'number'){
+      dbody.innerHTML += `<div style="color:#dc2626;margin-top:8px">Backtest failed: ${esc(data?.reason || 'error')}</div>`;
+      return;
     }
+
+    // Build conditions HTML
+    function condListHTML(conds){
+      if (!conds || !conds.length) return '<em>None</em>';
+      return '<ul style="margin:6px 0 0 18px;padding:0;line-height:1.3">' + conds.map(c => {
+        const k  = esc(c.raw_key || c.key || '');
+        const dir= c.dir ? ` ${c.dir === 'up' ? '↑' : '↓'}` : '';
+        const mt = c.method ? ` [${esc(c.method)}]` : '';
+        const vn = fmtNum(c.value_now);
+        const vp = (c.value_prev == null) ? '--' : fmtNum(c.value_prev);
+        const th = fmtNum(c.threshold);
+        return `<li><code>${k}</code>${dir}${mt} — now: <strong>${vn}</strong>, prev: ${vp}, thr: ${th}</li>`;
+      }).join('') + '</ul>';
+    }
+
+    const entry = data.entry || {};
+    const exit  = data.exit  || {};
+    if (!entry.time && data.reason) {
+  dbody.innerHTML += `<div style="color:#dc2626;margin-top:8px">No trade path: ${esc(data.reason)}</div>`;
+  return;
+}
+
+    const plColor = data.pl_pct >= 0 ? '#16a34a' : '#dc2626';
+    const plText  = `${Number(data.pl_pct).toFixed(2)}%`;
+
+    dbody.innerHTML = `
+      <div class="kv"><strong>Coins:</strong> ${s.coins.join(', ') || '--'}</div>
+      <div class="kv"><strong>Buy:</strong> ${s.buy.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+      <div class="kv"><strong>Sell:</strong> ${s.sell.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+      <div class="kv"><strong>Mode:</strong> ${s.schedule.mode}</div>
+      <div class="kv"><strong>Data:</strong> ${esc(data.source || 'n/a')} · res=${esc(String(data.resolution_sec||''))}s</div>
+      <div class="kv"><strong>P/L:</strong> <span style="color:${plColor};font-weight:700">${plText}</span> (hold ${(data.duration_sec/3600||0).toFixed(2)}h)</div>
+      <hr>
+      <div class="kv"><strong>ENTRY</strong></div>
+      <div class="kv">Time: ${fmtTime(entry.time)} · Price: ${fmtMoney(entry.price)} · Index: ${esc(entry.index)}</div>
+      <div class="kv">Conditions met:</div>
+      ${condListHTML(entry.conditions)}
+      <hr>
+      <div class="kv"><strong>EXIT</strong></div>
+      <div class="kv">Time: ${fmtTime(exit.time)} · Price: ${fmtMoney(exit.price)} · Index: ${esc(exit.index)}</div>
+      <div class="kv">Conditions met:</div>
+      ${condListHTML(exit.conditions)}
+    `;
+  } catch (e){
+    dbody.innerHTML += `<div style="color:#dc2626;margin-top:8px">Network error contacting /api/backtest</div>`;
+  }
+}
+
 
     function refreshTable(){
   tbody.innerHTML = strategies.map(s=>{

@@ -92,6 +92,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- ensure streaming thread starts whether run via `python file.py` or `uvicorn module:app` ---
+streaming_started = False
+def _start_streaming_thread_once():
+    """Idempotently start the WebSocket streaming thread."""
+    global streaming_started
+    if streaming_started:
+        return
+    t = Thread(target=stream_bitcoin_prices, daemon=True)
+    t.start()
+    streaming_started = True
+
+@app.on_event("startup")
+async def _on_startup():
+    _start_streaming_thread_once()
+
 
 def fetch_crypto_price(ticker: str) -> Optional[float]:
     """
@@ -356,19 +371,16 @@ async def get_history(minutes: int = 60, resolution: str = "1"):
         )
         data["source"] = "fallback"
         return JSONResponse(content=data)
+
 @app.post("/api/backtest")
 async def backtest_pl(request: Request):
     """
-    Backtest P/L% with:
-      - Finnhub candles (multi-resolution) or synthetic fallback for same window
-      - Key normalization (price/ema/bb/zscore/rv)
-      - Direction inference for SELL (profit target vs stop)
-      - Threshold normalization:
-          * For price-like keys (price, ema12/26, bb bands):
-            If median price >= 1000 and |thr| <= 100, interpret thr as PERCENT
-            (e.g., 2 => +2% target; -2 => -2% stop)
-          * Otherwise treat as absolute
-      - 'Edge' fallback for levels to avoid always-true-on-first-bar
+    Backtest P/L% with trade path details.
+    - Uses Finnhub candles (multi-res) or synthetic fallback for the same window.
+    - Normalizes keys (price/ema/bb/zscore/rv).
+    - Infers SELL direction (target vs stop).
+    - Treats small numbers as percent for price-like keys when price scale is large.
+    - Returns entry/exit snapshots so the UI can show what actually triggered.
     """
     import math
     from datetime import datetime as _dt
@@ -380,7 +392,7 @@ async def backtest_pl(request: Request):
     buy_conds = body.get("buy", []) or []
     sell_conds = body.get("sell", []) or []
     start_iso = body.get("start")
-    end_iso = body.get("end")
+    end_iso   = body.get("end")
 
     if not coin:
         return JSONResponse({"pl_pct": None, "reason": "no_coin"}, status_code=400)
@@ -394,31 +406,27 @@ async def backtest_pl(request: Request):
     if len(sell_conds) == 0:
         return JSONResponse({"pl_pct": None, "reason": "no_sell_conditions"}, status_code=200)
 
-    # ISO → unix seconds
     def _parse_iso(s: str) -> int:
         s = s.replace("Z", "+00:00")
         dt = _dt.fromisoformat(s)
         return int(dt.timestamp())
 
     start_ts = _parse_iso(start_iso)
-    end_ts = _parse_iso(end_iso)
+    end_ts   = _parse_iso(end_iso)
     if end_ts <= start_ts:
         return JSONResponse({"pl_pct": None, "reason": "end<=start"}, status_code=400)
 
-    # Finnhub candles with fallback to synthetic
+    # ---- fetch candles (fallback to synthetic) ----
     _RES_ORDER = [("60", 3600), ("30", 1800), ("5", 300), ("1", 60)]
-    resp = None
-    used_sec = None
+    resp, used_sec = None, None
     for res, sec in _RES_ORDER:
         try:
             r = finnhub_client.crypto_candles(symbol, res, start_ts, end_ts)
             if isinstance(r, dict) and r.get("s") == "ok" and r.get("t"):
-                resp = r
-                used_sec = sec
+                resp, used_sec = r, sec
                 break
         except Exception as e:
-            ts = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_line(f"[{ts}] backtest candles error (res={res}): {e}")
+            log_line(f"[{_dt.now():%Y-%m-%d %H:%M:%S}] backtest candles error (res={res}): {e}")
 
     source_used = "finnhub"
     if resp is None:
@@ -432,12 +440,8 @@ async def backtest_pl(request: Request):
             res_choice, used_sec = "5", 300
         else:
             res_choice, used_sec = "1", 60
-
         sample = _generate_sample_candles(
-            minutes=minutes,
-            resolution=res_choice,
-            seed=(start_ts % 100_000),
-            crypto_name=coin
+            minutes=minutes, resolution=res_choice, seed=(start_ts % 100_000), crypto_name=coin
         )
         resp = {
             "s": "ok",
@@ -448,12 +452,7 @@ async def backtest_pl(request: Request):
             "c": [c["c"] for c in sample["candles"]],
         }
 
-    # Build DF
-    t = resp.get("t", [])
-    o = resp.get("o", [])
-    h = resp.get("h", [])
-    l = resp.get("l", [])
-    c = resp.get("c", [])
+    t, o, h, l, c = resp.get("t", []), resp.get("o", []), resp.get("h", []), resp.get("l", []), resp.get("c", [])
     if not t or not c:
         return JSONResponse({"pl_pct": None, "reason": "empty"}, status_code=200)
 
@@ -470,29 +469,26 @@ async def backtest_pl(request: Request):
 
     prices = df["close"].astype(float)
 
-    # Indicators (aligned with frontend)
+    # ---- indicators (match frontend) ----
     ema12 = prices.ewm(span=12, adjust=False).mean()
     ema26 = prices.ewm(span=26, adjust=False).mean()
-    sma20 = prices.rolling(window=20).mean()
-    std20 = prices.rolling(window=20).std()
-    bb_upper = sma20 + 2 * std20
-    bb_lower = sma20 - 2 * std20
-
-    logret = _np.log(prices / prices.shift(1))
+    sma20 = prices.rolling(20).mean()
+    std20 = prices.rolling(20).std()
+    bb_upper = sma20 + 2*std20
+    bb_lower = sma20 - 2*std20
+    logret  = _np.log(prices / prices.shift(1))
     zr_mean = logret.rolling(20).mean()
     zr_std  = logret.rolling(20).std().replace(0.0, _np.nan)
     zscore  = (logret - zr_mean) / zr_std
-
     seconds_per_year = 365 * 24 * 3600
-    cadence_sec = used_sec or 3600
+    cadence_sec = int(used_sec or 3600)
     periods_per_year = seconds_per_year / cadence_sec
     rv = logret.rolling(20).std() * math.sqrt(periods_per_year)
 
-    # Key normalization
     def _canon(k: str):
         if not k: return None
         s = str(k).strip().lower().replace(" ", "").replace("-", "").replace("_", "")
-        aliases = {
+        return {
             "price": "price", "close": "price",
             "ema12": "ema12", "ema012": "ema12",
             "ema26": "ema26", "ema026": "ema26",
@@ -500,8 +496,7 @@ async def backtest_pl(request: Request):
             "bblower": "bb_lower", "bblowerband": "bb_lower",
             "zscore": "zscore",
             "rv": "rv", "realizedvol": "rv", "realisedvol": "rv",
-        }
-        return aliases.get(s)
+        }.get(s)
 
     series_map = {
         "price": prices,
@@ -516,45 +511,29 @@ async def backtest_pl(request: Request):
     price_like = {"price", "ema12", "ema26", "bb_upper", "bb_lower"}
     median_price = float(prices.median()) if len(prices) else 0.0
 
-    # SELL direction inference: compare sell vs buy for same key
+    # Compare sell vs buy for direction inference
     buy_thr_map_raw = {}
     for cond in buy_conds:
-        k = _canon(cond.get("key"))
-        v = cond.get("value")
+        k = _canon(cond.get("key")); v = cond.get("value")
         if k is not None and v is not None:
-            try:
-                buy_thr_map_raw[k] = float(v)
-            except Exception:
-                pass
+            try: buy_thr_map_raw[k] = float(v)
+            except Exception: pass
 
     def _sell_mode_for_key(key, sell_thr):
-        try:
-            st = float(sell_thr)
-        except Exception:
-            return "up"
+        try: st = float(sell_thr)
+        except Exception: return "up"
         b = buy_thr_map_raw.get(key)
-        if b is None:
-            return "up"
+        if b is None: return "up"
         return "up" if st >= b else "down"
 
-    # Normalize thresholds to absolute numbers appropriate for the series scale
     def _norm_thr(key, thr, mode):
-        """Convert % → absolute when appropriate; keep absolute otherwise."""
-        if thr is None:
-            return None
-        try:
-            x = float(thr)
-        except Exception:
-            return None
+        if thr is None: return None
+        try: x = float(thr)
+        except Exception: return None
         if key in price_like and median_price >= 1000 and abs(x) <= 100:
-            # treat as percent around the median price
-            if mode == "up":
-                return median_price * (1.0 + x / 100.0)
-            else:
-                return median_price * (1.0 - abs(x) / 100.0)
+            return median_price * (1.0 + (x/100.0)) if mode == "up" else median_price * (1.0 - abs(x)/100.0)
         return x
 
-    # Helpers
     def _get_val(key, idx):
         ser = series_map.get(key)
         if ser is None: return None
@@ -562,118 +541,122 @@ async def backtest_pl(request: Request):
         if _pd.isna(v) or not _np.isfinite(v): return None
         return float(v)
 
-    def _cross_up(idx, key, thr):
-        if idx <= 0: return False
-        v_prev = _get_val(key, idx-1); v_now = _get_val(key, idx)
-        if v_prev is None or v_now is None: return False
-        return (v_prev < thr) and (v_now >= thr)
+    def _cross_up(i, key, thr):
+        if i <= 0: return False
+        vp, vn = _get_val(key, i-1), _get_val(key, i)
+        return (vp is not None and vn is not None and vp < thr <= vn)
 
-    def _cross_down(idx, key, thr):
-        if idx <= 0: return False
-        v_prev = _get_val(key, idx-1); v_now = _get_val(key, idx)
-        if v_prev is None or v_now is None: return False
-        return (v_prev > thr) and (v_now <= thr)
+    def _cross_down(i, key, thr):
+        if i <= 0: return False
+        vp, vn = _get_val(key, i-1), _get_val(key, i)
+        return (vp is not None and vn is not None and vp > thr >= vn)
 
-    def _level_ge(idx, key, thr):
-        v = _get_val(key, idx)
-        return (v is not None) and (v >= thr)
+    def _edge_ge(i, key, thr):
+        if i == 0: return (_get_val(key, 0) or -_np.inf) >= thr
+        return not ((_get_val(key, i-1) or -_np.inf) >= thr) and ((_get_val(key, i) or -_np.inf) >= thr)
 
-    def _level_le(idx, key, thr):
-        v = _get_val(key, idx)
-        return (v is not None) and (v <= thr)
+    def _edge_le(i, key, thr):
+        if i == 0: return (_get_val(key, 0) or _np.inf) <= thr
+        return not ((_get_val(key, i-1) or _np.inf) <= thr) and ((_get_val(key, i) or _np.inf) <= thr)
 
-    # 'Edge' versions of level checks to avoid always-true-from-first-bar
-    def _edge_ge(idx, key, thr):
-        if idx == 0:
-            return _level_ge(0, key, thr)
-        return (not _level_ge(idx-1, key, thr)) and _level_ge(idx, key, thr)
-
-    def _edge_le(idx, key, thr):
-        if idx == 0:
-            return _level_le(0, key, thr)
-        return (not _level_le(idx-1, key, thr)) and _level_le(idx, key, thr)
-
-    def _all_buy_cross_up(i, conds):
-        if not conds: return False
-        for cond in conds:
-            raw = cond.get("value")
-            key = _canon(cond.get("key"))
-            if key is None or raw is None: return False
-            thr = _norm_thr(key, raw, "up")
-            if thr is None or not _cross_up(i, key, thr): return False
+    # --- scans (record methods & snapshots) ---
+    def _buy_cross_ok(i):
+        for cnd in buy_conds:
+            key = _canon(cnd.get("key")); thr = _norm_thr(key, cnd.get("value"), "up")
+            if key is None or thr is None or not _cross_up(i, key, thr): return False
         return True
 
-    def _all_buy_edge_ge(i, conds):
-        if not conds: return False
-        for cond in conds:
-            raw = cond.get("value")
-            key = _canon(cond.get("key"))
-            if key is None or raw is None: return False
-            thr = _norm_thr(key, raw, "up")
-            if thr is None or not _edge_ge(i, key, thr): return False
+    def _buy_edge_ok(i):
+        for cnd in buy_conds:
+            key = _canon(cnd.get("key")); thr = _norm_thr(key, cnd.get("value"), "up")
+            if key is None or thr is None or not _edge_ge(i, key, thr): return False
         return True
 
-    def _all_sell_cross(i, conds):
-        if not conds: return False
-        for cond in conds:
-            raw = cond.get("value")
-            key = _canon(cond.get("key"))
-            if key is None or raw is None: return False
-            mode = _sell_mode_for_key(key, raw)
-            thr = _norm_thr(key, raw, mode)
-            if thr is None: return False
+    def _sell_cross_ok(i):
+        for cnd in sell_conds:
+            key = _canon(cnd.get("key")); raw = cnd.get("value")
+            mode = _sell_mode_for_key(key, raw); thr = _norm_thr(key, raw, mode)
             ok = _cross_up(i, key, thr) if mode == "up" else _cross_down(i, key, thr)
-            if not ok: return False
+            if key is None or thr is None or not ok: return False
         return True
 
-    def _all_sell_edge(i, conds):
-        if not conds: return False
-        for cond in conds:
-            raw = cond.get("value")
-            key = _canon(cond.get("key"))
-            if key is None or raw is None: return False
-            mode = _sell_mode_for_key(key, raw)
-            thr = _norm_thr(key, raw, mode)
-            if thr is None: return False
+    def _sell_edge_ok(i):
+        for cnd in sell_conds:
+            key = _canon(cnd.get("key")); raw = cnd.get("value")
+            mode = _sell_mode_for_key(key, raw); thr = _norm_thr(key, raw, mode)
             ok = _edge_ge(i, key, thr) if mode == "up" else _edge_le(i, key, thr)
-            if not ok: return False
+            if key is None or thr is None or not ok: return False
         return True
 
-    # BUY: cross-up first, then edge-based >= fallback
-    buy_idx = None
+    # BUY
+    buy_idx, buy_method = None, None
     for i in range(1, len(df)):
-        if _all_buy_cross_up(i, buy_conds):
-            buy_idx = i
-            break
+        if _buy_cross_ok(i): buy_idx, buy_method = i, "cross_up"; break
     if buy_idx is None:
         for i in range(len(df)):
-            if _all_buy_edge_ge(i, buy_conds):
-                buy_idx = i
-                break
+            if _buy_edge_ok(i): buy_idx, buy_method = i, "edge_ge"; break
     if buy_idx is None:
         return JSONResponse({"pl_pct": None, "reason": "no_buy_trigger", "source": source_used}, status_code=200)
 
-    # SELL: inferred direction; cross first, then edge-based fallback
-    sell_idx = None
-    for j in range(max(buy_idx + 1, 1), len(df)):
-        if _all_sell_cross(j, sell_conds):
-            sell_idx = j
-            break
+    # SELL
+    sell_idx, sell_method = None, None
+    for j in range(max(buy_idx+1, 1), len(df)):
+        if _sell_cross_ok(j): sell_idx, sell_method = j, "cross"; break
     if sell_idx is None:
-        for j in range(buy_idx + 1, len(df)):
-            if _all_sell_edge(j, sell_conds):
-                sell_idx = j
-                break
+        for j in range(buy_idx+1, len(df)):
+            if _sell_edge_ok(j): sell_idx, sell_method = j, "edge"; break
     if sell_idx is None:
         return JSONResponse({"pl_pct": None, "reason": "no_sell_trigger", "source": source_used}, status_code=200)
 
-    buy_price = float(prices.iloc[buy_idx])
-    sell_price = float(prices.iloc[sell_idx])
+    buy_price, sell_price = float(prices.iloc[buy_idx]), float(prices.iloc[sell_idx])
     if buy_price <= 0:
         return JSONResponse({"pl_pct": None, "reason": "bad_buy_price", "source": source_used}, status_code=200)
 
+    # snapshots for UI
+    def _snap(idx, cond, side, method):
+        raw_key = cond.get("key"); key = _canon(raw_key); raw_thr = cond.get("value")
+        mode = "up" if side == "buy" else _sell_mode_for_key(key, raw_thr)
+        thr  = _norm_thr(key, raw_thr, mode)
+        val_now  = _get_val(key, idx)
+        val_prev = _get_val(key, idx-1) if idx > 0 else None
+        return {
+            "raw_key": raw_key,
+            "key": key,
+            "dir": mode if side == "sell" else "up",
+            "method": method,
+            "threshold": thr,
+            "raw_threshold": raw_thr,
+            "value_now": val_now,
+            "value_prev": val_prev,
+        }
+
+    entry = {
+        "index": int(buy_idx),
+        "time": df.index[buy_idx].isoformat(),
+        "price": buy_price,
+        "conditions": [_snap(buy_idx, c, "buy", buy_method) for c in buy_conds],
+    }
+    exit_ = {
+        "index": int(sell_idx),
+        "time": df.index[sell_idx].isoformat(),
+        "price": sell_price,
+        "conditions": [_snap(sell_idx, c, "sell", sell_method) for c in sell_conds],
+    }
+
     pl_pct = (sell_price - buy_price) / buy_price * 100.0
-    return JSONResponse({"pl_pct": pl_pct, "source": source_used})
+    out = {
+        "pl_pct": pl_pct,
+        "source": source_used,
+        "resolution_sec": cadence_sec,
+        "duration_sec": int((sell_idx - buy_idx) * cadence_sec),
+        "entry": entry,
+        "exit": exit_,
+    }
+    # Helpful line in /api/logs so you can verify server returned details
+    log_line(f"Backtest {coin}: entry@{entry['time']} {entry['price']:.2f} -> exit@{exit_['time']} {exit_['price']:.2f} = {pl_pct:.2f}%")
+    return JSONResponse(out)
+
+
 
 
 
@@ -807,9 +790,8 @@ def main():
     Start price streaming and FastAPI server.
     """
     print("Bitcoin Price Tracker - Starting...")
-    # Start price streaming in background thread
-    streaming_thread = Thread(target=stream_bitcoin_prices, daemon=True)
-    streaming_thread.start()
+    # Start price streaming (idempotent)
+    _start_streaming_thread_once()
 
     print("FastAPI server starting on http://localhost:8000")
     print("API endpoint: http://localhost:8000/api/price")
