@@ -3,3 +3,7 @@ uvicorn[standard]
 finnhub-python
 websocket-client
 requests
+pandas
+numpy
+scipy
+matplotlib

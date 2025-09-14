@@ -26,6 +26,9 @@ try:
 except Exception:  # pragma: no cover
     WebSocketApp = None  # type: ignore
 
+# Import indicators
+from indicators import indicator_calc
+
 # Initialize the Finnhub client with your API key
 API_KEY = "d32dvl1r01qn0gi3ief0d32dvl1r01qn0gi3iefg"
 finnhub_client = finnhub.Client(api_key=API_KEY)
@@ -131,6 +134,29 @@ async def get_logs(limit: int = 200):
         lines = list(log_lines)[-capped:]
     return JSONResponse(content={"lines": lines})
 
+# FastAPI endpoint to get indicator data
+@app.get("/api/indicators")
+async def get_indicators():
+    """Return current indicator data for charting"""
+    try:
+        indicator_data = indicator_calc.get_indicator_data_for_chart()
+        # Return empty data structure if no data available yet
+        if not indicator_data:
+            return JSONResponse(content={
+                "ema_price": {"timestamps": [], "values": []},
+                "spread": 0,
+                "vpin": 0,
+                "hawkes_intensity": 0,
+                "zscore_returns": {"timestamps": [], "values": []},
+                "realized_vol": {"timestamps": [], "values": []},
+                "trade_to_quote_ratio": 0,
+                "last_price": 0
+            })
+        return JSONResponse(content=indicator_data)
+    except Exception as e:
+        log_line(f"Indicator error: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 # Simple test endpoint to generate sample data
 @app.get("/api/test-candles")
 async def test_candles():
@@ -164,7 +190,7 @@ async def test_candles():
 async def get_history(minutes: int = 60, resolution: str = '1'):
     """
     Return recent OHLC candles using CoinGecko free API.
-    Response: { points: [{ t: ISO8601 string, p: float }, ...], candles: [{ t: unix_ts, o, h, l, c }, ...] }
+    Response: { points: [{ t: ISO8601 string, p: float }, ...], candles: [{ t: unix_ts, o, h, l, l, c }, ...] }
     """
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_line(f"[{ts}] get_history called: minutes={minutes}, resolution={resolution}")
@@ -328,6 +354,7 @@ def stream_bitcoin_prices() -> None:
         for trade in data:
             price = trade.get("p")
             ts_ms = trade.get("t")
+            size = trade.get("v", 1)  # Default size if not provided
             if not isinstance(price, (int, float)):
                 continue
 
@@ -351,6 +378,17 @@ def stream_bitcoin_prices() -> None:
                 "percent_change": percent_change,
                 "crypto": current_crypto_name
             })
+
+            # Update indicators with trade data
+            try:
+                indicator_calc.add_trade(
+                    price=price,
+                    size=size,
+                    timestamp=ts_ms or int(now_ts * 1000),
+                    symbol=current_crypto_name
+                )
+            except Exception as e:
+                log_line(f"[{timestamp}] Indicator update error: {e}")
 
             last_price = price
 

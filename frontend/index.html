@@ -1,329 +1,536 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Bitcoin Price - Live Table</title>
-    <style>
-        body { background: #ffffff; margin: 0; padding: 12px; }
-        .mono { font-family: 'Courier New', monospace; }
-        .header { display: flex; justify-content: space-between; align-items: center; font-size: 18px; color: #222; margin-bottom: 6px; }
-        .header-left { display: flex; align-items: center; gap: 12px; }
-        .crypto-dropdown { font-family: 'Courier New', monospace; font-size: 14px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; background: #f9fafb; }
-        .status { font-size: 12px; color: #666; margin-bottom: 8px; }
-        .layout { display: grid; grid-template-columns: 33% 1fr; gap: 12px; height: calc(100vh - 60px); }
-        .left { min-width: 280px; display: flex; flex-direction: column; overflow: hidden; }
-        .feed { flex: 1; overflow: auto; border: 1px solid #e5e7eb; }
-        table { width: 100%; border-collapse: collapse; }
-        thead th { position: sticky; top: 0; background: #fff; border-bottom: 2px solid #222; padding: 6px; text-align: left; font-size: 13px; }
-        tbody td { border-bottom: 1px solid #e5e7eb; padding: 5px 6px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        tr.newest td { background: #fafafa; }
-        .up { color: #16a34a; }
-        .down { color: #dc2626; }
-        .flat { color: #111827; }
-        .col-time { width: 88px; }
-        .col-price { width: 100px; }
-        .col-move { width: 84px; }
-        .col-pct { width: 70px; }
-        .right { position: relative; border: 1px solid #e5e7eb; height: 100%; }
-        .controls { position: absolute; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; background: #fff; }
-        .btn { font-family: 'Courier New', monospace; font-size: 12px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; background: #f9fafb; color: #111827; cursor: pointer; }
-        .btn.active { background: #111827; color: #fff; border-color: #111827; }
-        #chartDiv { position: absolute; top: 36px; left: 0; right: 0; bottom: 0; }
-    </style>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Removed restrictive CSP to allow CDN scripts (Chart.js). Add stricter CSP later if needed. -->
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta charset="utf-8">
-    <meta name="charset" content="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="utf-8" />
+<title>Bitcoin Price - Clean Indicators (final)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://unpkg.com">
+<style>
+  html, body { height:100%; overflow:hidden; }
+  body { background:#ffffff; margin:0; padding:12px; font-family:"Courier New", monospace; color:#111827; }
+
+  .nav-card { background:#f8f9fa;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;gap:8px; }
+  .nav-btn{flex:1;padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer}
+  .nav-btn.active{background:#111827;color:#fff;border-color:#111827}
+
+  /* screens */
+  .screen { display:none; }
+  .screen.active { display:block; }
+
+  /* Viewer layout */
+  .layout{
+    display:grid;
+    grid-template-columns:320px 1fr;
+    gap:12px;
+    height: var(--viewerHeight, calc(100vh - 120px));
+  }
+  .left{display:flex;flex-direction:column;min-width:280px;height:100%;min-height:0;}
+  .feed{flex:1;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px;background:#fff;min-height:0;}
+  table{width:100%;border-collapse:collapse}
+  thead th{position:sticky;top:0;background:#fff;padding:6px;border-bottom:2px solid #222}
+  tbody td{padding:6px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+
+  .right{
+    display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:8px;position:relative;overflow:hidden;background:#fff;
+    height:100%;min-height:0;
+  }
+  .controls{height:44px;display:flex;align-items:center;gap:8px;padding:6px;border-bottom:1px solid #e5e7eb;background:#fff;flex:0 0 auto;}
+  .btn{padding:6px 10px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer}
+  #chartContainer{flex:1;display:flex;flex-direction:column;min-height:0}
+  #chartDiv{flex:1;min-height:220px;position:relative;min-height:0}
+
+  .indicators-wrapper{
+    display:flex;flex-direction:column;border-top:1px solid #e5e7eb;background:#fafafa;flex:0 0 auto;
+  }
+  .indicator-row{display:flex;gap:12px;padding:8px;height:140px;align-items:stretch;flex:0 0 auto;}
+  .indicator-card{flex:1;background:#2d2d2d;border-radius:6px;padding:8px;border:1px solid #404040;display:flex;flex-direction:column;min-width:0;}
+  .indicator-header{color:#fff;font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between}
+  .indicator-canvas{flex:1;background:#2d2d2d;border-radius:4px;overflow:hidden;min-height:0;position:relative;}
+  canvas.ind-canvas{width:100%;height:100%;display:block}
+
+  .center-screen{
+    border:1px dashed #d1d5db;border-radius:8px;height:calc(var(--viewerHeight,50vh));display:flex;align-items:center;justify-content:center;color:#6b7280;
+  }
+
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr;grid-auto-rows:auto;}
+    .left{order:2} .right{order:1}
+  }
+</style>
 </head>
-<body class="mono">
-    <div class="header">
-        <div class="header-left">
-            <select id="cryptoSelect" class="crypto-dropdown">
-                <option value="Bitcoin">Bitcoin (BTC)</option>
-            </select>
-            <span id="ticker">Bitcoin - Live Trading</span>
-        </div>
-        <div class="status" id="status">Connecting...</div>
+<body>
+  <div class="nav-card">
+    <button class="nav-btn active" data-view="viewer">Viewer</button>
+    <button class="nav-btn" data-view="strategy">Strategy</button>
+    <button class="nav-btn" data-view="backtest">Backtest</button>
+  </div>
+
+  <div id="topbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div id="topbarLeft" style="display:flex;gap:12px;align-items:center">
+      <select id="cryptoSelect" style="padding:6px;border-radius:4px;border:1px solid #d1d5db">
+        <option>Bitcoin</option>
+      </select>
+      <div id="ticker">Bitcoin - Live Trading</div>
     </div>
-    <div class="layout">
-        <div class="left">
-            <div class="feed">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="mono col-time">Time</th>
-                            <th class="mono col-price">Price</th>
-                            <th class="mono col-move">Move</th>
-                            <th class="mono col-pct">%</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody"></tbody>
-                </table>
-            </div>
+    <div id="status" style="font-size:13px;color:#666">Connecting...</div>
+  </div>
+
+  <div id="viewerScreen" class="screen active">
+    <div class="layout" id="viewerLayout">
+      <div class="left">
+        <div class="feed">
+          <table>
+            <thead>
+              <tr><th class="mono">Time</th><th class="mono">Price</th><th class="mono">Move</th><th class="mono">%</th></tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
         </div>
-        <div class="right">
-            <div class="controls">
-                <button class="btn" data-range="1h">1H</button>
-                <button class="btn" data-range="1d">1D</button>
-                <button class="btn" data-range="1w">1W</button>
-                <button class="btn" data-range="1m">1M</button>
-                <button class="btn" data-range="1y">1Y</button>
-            </div>
-            <div id="chartDiv"></div>
+      </div>
+
+      <div class="right">
+        <div class="controls">
+          <button class="btn" data-range="1h">1H</button>
+          <button class="btn" data-range="1d">1D</button>
+          <button class="btn" data-range="1w">1W</button>
+          <button class="btn" data-range="1m">1M</button>
         </div>
+
+        <div id="chartContainer">
+          <div id="chartDiv"></div>
+
+          <div class="indicators-wrapper">
+            <div class="indicator-row">
+              <div class="indicator-card">
+                <div class="indicator-header">
+                  <span>Z-Score (returns)</span>
+                  <span id="zscoreVal">--</span>
+                </div>
+                <div class="indicator-canvas">
+                  <canvas id="zscoreCanvas" class="ind-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="indicator-row">
+              <div class="indicator-card">
+                <div class="indicator-header">
+                  <span>Realized Volatility</span>
+                  <span id="volVal">--</span>
+                </div>
+                <div class="indicator-canvas">
+                  <canvas id="volCanvas" class="ind-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
+  </div>
 
-    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
-    <script>
-        window.addEventListener('load', () => {
-        const tbody = document.getElementById('tbody');
-        const statusEl = document.getElementById('status');
-        const cryptoSelect = document.getElementById('cryptoSelect');
-        const tickerEl = document.getElementById('ticker');
-        let chart, candleSeries, lineSeries;
-        let lastPrice = null;
-        let currentRange = '1h';
-        let resolutionSec = 60; // default 1 minute
-        let chartType = 'candle'; // 'candle' or 'line'
-        let currentCrypto = 'Bitcoin';
-        const MAX_ROWS = 300;
-        const candleBuckets = new Map(); // bucket -> candle
+  <div id="strategyScreen" class="screen">
+    <div class="center-screen">Strategy Builder — Coming Soon</div>
+  </div>
 
-        function shortTime(ts) {
-            try { return new Date(ts.replace(' ', 'T')).toLocaleTimeString([], { hour12: false }).slice(0,8); } catch { return ''; }
-        }
+  <div id="backtestScreen" class="screen">
+    <div class="center-screen">Backtest — Coming Soon</div>
+  </div>
 
-        function addRow(d) {
-            if (d.price == null) return;
-            const tr = document.createElement('tr');
-            const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
-            tr.className = 'newest';
-            const ts = shortTime(d.timestamp || '');
-            const price = Number(d.price).toFixed(2);
-            const move = d.delta == null ? '' : `${d.delta >= 0 ? '+' : ''}${Number(d.delta).toFixed(2)}`;
-            const pct = d.percent_change == null ? '' : `${d.percent_change >= 0 ? '+' : ''}${Number(d.percent_change).toFixed(2)}%`;
-            tr.innerHTML = `<td class="mono">${ts}</td><td class="mono">$${price}</td><td class="mono ${direction}">${move}</td><td class="mono ${direction}">${pct}</td>`;
-            if (tbody.firstChild) { tbody.firstChild.classList.remove('newest'); tbody.insertBefore(tr, tbody.firstChild); } else { tbody.appendChild(tr); }
-            while (tbody.children.length > MAX_ROWS) tbody.removeChild(tbody.lastChild);
-        }
+<script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(() => {
+  // ---------- view switching ----------
+  const navBtns = document.querySelectorAll('.nav-btn');
+  const screens = {
+    viewer: document.getElementById('viewerScreen'),
+    strategy: document.getElementById('strategyScreen'),
+    backtest: document.getElementById('backtestScreen'),
+  };
+  const topbarLeft = document.getElementById('topbarLeft');
 
-        function ensureChart() {
-            if (chart) {
-                // Update time scale for current range
-                chart.applyOptions({
-                    timeScale: { 
-                        borderColor: '#e5e7eb', 
-                        timeVisible: true, 
-                        secondsVisible: currentRange === '1h',
-                        rightOffset: currentRange === '1h' ? 5 : 20
-                    }
-                });
-                return;
-            }
-            const div = document.getElementById('chartDiv');
-            chart = LightweightCharts.createChart(div, {
-                width: div.clientWidth,
-                height: div.clientHeight,
-                layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#111827', fontFamily: 'Courier New' },
-                grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
-                rightPriceScale: { borderColor: '#e5e7eb' },
-                timeScale: { 
-                    borderColor: '#e5e7eb', 
-                    timeVisible: true, 
-                    secondsVisible: currentRange === '1h',
-                    rightOffset: currentRange === '1h' ? 5 : 20
-                },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
-            });
-            window.addEventListener('resize', () => { chart.applyOptions({ width: div.clientWidth, height: div.clientHeight }); });
-        }
+  function setActiveView(name){
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    screens[name].classList.add('active');
+    document.querySelector(`.nav-btn[data-view="${name}"]`).classList.add('active');
+    topbarLeft.style.display = (name === 'viewer') ? 'flex' : 'none';
+    if (name === 'viewer') adjustViewerHeight();
+  }
+  navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-        function getRangeParams(range) {
-            switch (range) {
-                case '1h': return { minutes: 60, resolution: '1', resSec: 60, type: 'candle' };
-                case '1d': return { minutes: 24 * 60, resolution: '5', resSec: 300, type: 'candle' };
-                case '1w': return { minutes: 7 * 24 * 60, resolution: '30', resSec: 1800, type: 'line' };
-                case '1m': return { minutes: 30 * 24 * 60, resolution: '60', resSec: 3600, type: 'line' };
-                case '1y': return { minutes: 365 * 24 * 60, resolution: 'D', resSec: 86400, type: 'line' };
-                default: return { minutes: 60, resolution: '1', resSec: 60, type: 'candle' };
-            }
-        }
-        function setHistory(data, resSec, type) {
-            ensureChart();
-            candleBuckets.clear();
-            
-            // Remove existing series
-            if (candleSeries) {
-                chart.removeSeries(candleSeries);
-                candleSeries = null;
-            }
-            if (lineSeries) {
-                chart.removeSeries(lineSeries);
-                lineSeries = null;
-            }
-            
-            let candles = [];
-            if (data && Array.isArray(data.candles) && data.candles.length > 0) {
-                candles = data.candles.map(c => ({ time: c.t, open: c.o, high: c.h, low: c.l, close: c.c }));
-            } else if (data && Array.isArray(data.points)) {
-                candles = data.points.map(pt => { const p = Number(pt.p); return { time: Math.floor(new Date(pt.t).getTime()/1000), open: p, high: p, low: p, close: p }; });
-            }
-            candles.sort((a,b)=>a.time-b.time);
-            
-            if (type === 'line') {
-                // Use line chart for longer timeframes
-                lineSeries = chart.addLineSeries({ 
-                    color: '#2563eb', 
-                    lineWidth: 2,
-                    priceLineVisible: false
-                });
-                const lineData = candles.map(c => ({ time: c.time, value: c.close }));
-                lineSeries.setData(lineData);
-                chartType = 'line';
-            } else {
-                // Use candlestick chart for shorter timeframes
-                candleSeries = chart.addCandlestickSeries({ 
-                    upColor: '#16a34a', 
-                    downColor: '#dc2626', 
-                    borderDownColor: '#dc2626', 
-                    borderUpColor: '#16a34a', 
-                    wickDownColor: '#dc2626', 
-                    wickUpColor: '#16a34a' 
-                });
-                candleSeries.setData(candles);
-                chartType = 'candle';
-                for (const c of candles) candleBuckets.set(c.time - (c.time % resSec), c);
-            }
-        }
+  // ---------- lock viewer height ----------
+  const navCard = document.querySelector('.nav-card');
+  const topbar  = document.getElementById('topbar');
+  const viewerLayout = document.getElementById('viewerLayout');
 
-        function updateLive(price, isoTs) {
-            if (chartType === 'line') {
-                // For line charts, just update the last point
-                if (lineSeries) {
-                    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
-                    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
-                    lineSeries.update({ time: bucket, value: Number(price) });
-                }
-                return;
-            }
-            
-            // For candlestick charts, update the current candle
-            if (!candleSeries) return;
-            ensureChart();
-            const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
-            const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
-            const p = Number(price);
-            let c = candleBuckets.get(bucket);
-            if (!c) {
-                c = { time: bucket, open: p, high: p, low: p, close: p };
-                candleBuckets.set(bucket, c);
-            } else {
-                if (p > c.high) c.high = p;
-                if (p < c.low) c.low = p;
-                c.close = p;
-            }
-            candleSeries.update(c);
-        }
+  function adjustViewerHeight(){
+    const pad = 24;
+    const h = Math.max(0, window.innerHeight - navCard.offsetHeight - topbar.offsetHeight - pad);
+    document.documentElement.style.setProperty('--viewerHeight', h + 'px');
+    viewerLayout.style.height = 'var(--viewerHeight)';
+  }
+  window.addEventListener('resize', adjustViewerHeight);
+  requestAnimationFrame(adjustViewerHeight);
 
-        async function loadHistory(range='1h') {
-            try {
-                currentRange = range;
-                const { minutes, resolution, resSec, type } = getRangeParams(range);
-                resolutionSec = resSec;
-                const url = `http://localhost:8000/api/history?minutes=${minutes}&resolution=${encodeURIComponent(resolution)}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                setHistory(data, resolutionSec, type);
-            } catch (e) { /* ignore */ }
-        }
+  // ---------- crypto dropdown ----------
+  const cryptoSelect = document.getElementById('cryptoSelect');
+  const tickerEl = document.getElementById('ticker');
 
-        function poll() {
-            fetch('http://localhost:8000/api/price', { method: 'GET', mode: 'cors' })
-                .then(r => r.json())
-                .then(d => {
-                    statusEl.textContent = 'Connected - Live';
-                    statusEl.style.color = 'green';
-                    if (lastPrice === null || d.price !== lastPrice) {
-                        addRow(d);
-                        lastPrice = d.price;
-                        updateLive(d.price, d.timestamp);
-                    }
-                })
-                .catch(() => {
-                    statusEl.textContent = 'Disconnected - retrying...';
-                    statusEl.style.color = 'red';
-                });
-        }
+  async function loadCryptos(){
+    try{
+      const res = await fetch('http://localhost:8000/api/cryptos');
+      const data = await res.json();
+      cryptoSelect.innerHTML = '';
+      data.cryptos.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === data.current) opt.selected = true;
+        cryptoSelect.appendChild(opt);
+      });
+      updateTicker(data.current);
+    }catch(e){ /* ignore */ }
+  }
+  function updateTicker(name){ tickerEl.textContent = `${name} - Live Trading`; }
+  async function changeCrypto(name){
+    try{
+      const res = await fetch('http://localhost:8000/api/change-crypto', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crypto: name })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        updateTicker(name);
+        const activeBtn = document.querySelector('.btn.active');
+        await loadHistory(activeBtn ? activeBtn.dataset.range : '1h');
+      }
+    }catch(e){ /* ignore */ }
+  }
+  cryptoSelect.addEventListener('change', (e)=> changeCrypto(e.target.value));
 
-        // Load available cryptos
-        async function loadCryptos() {
-            try {
-                const res = await fetch('http://localhost:8000/api/cryptos');
-                const data = await res.json();
-                cryptoSelect.innerHTML = '';
-                data.cryptos.forEach(crypto => {
-                    const option = document.createElement('option');
-                    option.value = crypto;
-                    const symbols = {
-                        'Bitcoin': 'BTC', 'Ethereum': 'ETH', 'BNB': 'BNB', 'XRP': 'XRP', 
-                        'Cardano': 'ADA', 'Solana': 'SOL', 'Dogecoin': 'DOGE', 
-                        'Polygon': 'MATIC', 'Litecoin': 'LTC', 'Avalanche': 'AVAX'
-                    };
-                    option.textContent = `${crypto} (${symbols[crypto] || crypto.slice(0,3).toUpperCase()})`;
-                    if (crypto === data.current) option.selected = true;
-                    cryptoSelect.appendChild(option);
-                });
-                currentCrypto = data.current;
-                updateTicker();
-            } catch (e) { console.error('Failed to load cryptos:', e); }
-        }
+  // ---------- viewer logic ----------
+  let chart = null;
+  let candleSeries = null;
+  let overlaySeries = { ema12: null, ema26: null, bbUpper: null, bbLower: null };
+  let candleBuckets = new Map();
+  let resolutionSec = 60;
+  let currentCandles = [];
+  let currentIntervalSec = 60;
 
-        // Change crypto
-        async function changeCrypto(crypto) {
-            try {
-                const res = await fetch('http://localhost:8000/api/change-crypto', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ crypto })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    currentCrypto = crypto;
-                    updateTicker();
-                    // Clear table and reset
-                    tbody.innerHTML = '';
-                    lastPrice = null;
-                    // Reload chart data for new crypto
-                    await loadHistory(currentRange);
-                }
-            } catch (e) { console.error('Failed to change crypto:', e); }
-        }
+  function ensureChart() {
+    if (chart) return;
+    const div = document.getElementById('chartDiv');
+    chart = LightweightCharts.createChart(div, {
+      layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#111827', fontFamily: 'Courier New' },
+      grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
+      rightPriceScale: { borderColor: '#e5e7eb' },
+      timeScale: { borderColor: '#e5e7eb', timeVisible: true, rightOffset: 10 },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Magnet }
+    });
+    window.addEventListener('resize', () => { chart.applyOptions({ width: div.clientWidth, height: div.clientHeight }); });
+  }
 
-        function updateTicker() {
-            tickerEl.textContent = `${currentCrypto} - Live Trading`;
-        }
+  function setHistory(data, resSec) {
+    ensureChart();
+    resolutionSec = resSec;
+    candleBuckets.clear();
+    if (candleSeries) { chart.removeSeries(candleSeries); candleSeries = null; }
 
-        // Init
-        cryptoSelect.addEventListener('change', (e) => {
-            changeCrypto(e.target.value);
-        });
+    let candles = [];
+    if (data && Array.isArray(data.candles) && data.candles.length) {
+      candles = data.candles.map(c => ({ time: c.t, open: c.o, high: c.h, low: c.l, close: c.c }));
+    } else if (data && Array.isArray(data.points)) {
+      candles = data.points.map(pt => { const p = Number(pt.p); return { time: Math.floor(new Date(pt.t).getTime()/1000), open: p, high: p, low: p, close: p }; });
+    }
+    candles.sort((a,b)=>a.time-b.time);
+    currentCandles = candles;
+    currentIntervalSec = (data && data.interval) ? Number(data.interval) : resSec;
 
-        document.querySelectorAll('.btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                await loadHistory(btn.dataset.range);
-            });
-        });
+    candleSeries = chart.addCandlestickSeries({
+      upColor:'#16a34a', downColor:'#dc2626',
+      borderUpColor:'#16a34a', borderDownColor:'#dc2626',
+      wickUpColor:'#16a34a', wickDownColor:'#dc2626'
+    });
+    candleSeries.setData(candles);
+    for (const c of candles) candleBuckets.set(c.time - (c.time % resolutionSec), c);
 
-        loadCryptos();
-        loadHistory('1h');
-        poll();
-        setInterval(poll, 1000);
-        });
-    </script>
+    for (const k in overlaySeries) { if (overlaySeries[k]) overlaySeries[k].setData([]); }
+
+    computeAndRenderIndicatorsFromCandles();
+  }
+
+  // ---- indicator math ----
+  function ema(values, span) {
+    const k = 2 / (span + 1);
+    const out = []; let prev = null;
+    for (let i=0;i<values.length;i++) { const v=values[i]; prev = (prev===null? v : prev + k*(v-prev)); out.push(prev); }
+    return out;
+  }
+  function rollingMean(values, w) {
+    const out = new Array(values.length).fill(null); let sum=0;
+    for (let i=0;i<values.length;i++){ sum += values[i]; if(i>=w) sum -= values[i-w]; if(i>=w-1) out[i]=sum/w; }
+    return out;
+  }
+
+  // sample std using available window (n-1) for early indices
+  function rollingStd(values, w) {
+    const out = new Array(values.length).fill(null);
+    for (let i=0;i<values.length;i++){
+      const start = Math.max(0, i - w + 1);
+      const windowVals = values.slice(start, i+1);
+      const n = windowVals.length;
+      if (n <= 1) { out[i] = 0; continue; }
+      let sum = 0;
+      for (let v of windowVals) sum += v;
+      const mean = sum / n;
+      let ss = 0;
+      for (let v of windowVals) { const d = v - mean; ss += d*d; }
+      const variance = ss / (n - 1);
+      out[i] = Math.sqrt(Math.max(0, variance));
+    }
+    return out;
+  }
+
+  function computeAndRenderIndicatorsFromCandles() {
+    if (!currentCandles.length || !chart) return;
+    const closes = currentCandles.map(c => c.close);
+    const times  = currentCandles.map(c => c.time);
+
+    const ema12 = ema(closes, 12);
+    const ema26 = ema(closes, 26);
+
+    const sma20 = rollingMean(closes, 20);
+    const std20 = rollingStd(closes, 20);
+    const bbUpper = std20.map((s,i)=> s==null||sma20[i]==null? null : sma20[i] + 2*s);
+    const bbLower = std20.map((s,i)=> s==null||sma20[i]==null? null : sma20[i] - 2*s);
+
+    // use log returns and make first element 0
+    const ret = closes.map((v,i)=> i===0 ? 0 : Math.log(v / closes[i-1]));
+
+    // rolling mean/std for zscore using the updated rollingStd
+    const rMean = rollingMean(ret, 20);
+    const rStd  = rollingStd(ret, 20).map(s => (s==null || s === 0) ? 1e-12 : s);
+    const zscore = ret.map((r,i)=> rMean[i]==null? null : (r - rMean[i]) / rStd[i]);
+
+    // realized volatility: rolling std of log returns (per-period) then annualize
+    const rv = rollingStd(ret, 20);
+    const secondsPerYear = 365 * 24 * 3600;
+    const periodsPerYear = secondsPerYear / Math.max(1, currentIntervalSec);
+    const rvAnn = rv.map(v => v == null ? null : v * Math.sqrt(periodsPerYear));
+
+    const mk = (vals) => times.map((t,i)=> vals[i]==null ? null : ({ time:t, value:vals[i] })).filter(Boolean);
+    const makeLine = (obj, key, opts) => { if (!obj[key]) obj[key] = chart.addLineSeries(Object.assign({ priceLineVisible:false }, opts)); return obj[key]; }
+
+    makeLine(overlaySeries, 'ema12',  { color:'#3b82f6', lineWidth:2 }).setData(mk(ema12));
+    makeLine(overlaySeries, 'ema26',  { color:'#f97316', lineWidth:2 }).setData(mk(ema26));
+    makeLine(overlaySeries, 'bbUpper',{ color:'#6b7280', lineWidth:1 }).setData(mk(bbUpper));
+    makeLine(overlaySeries, 'bbLower',{ color:'#6b7280', lineWidth:1 }).setData(mk(bbLower));
+
+    plotCanvasLineAligned('zscoreCanvas', times, zscore, { color:'#fff', center:0, valueElId:'zscoreVal', format:(v)=>formatNumber(v,3) });
+    plotCanvasLineAligned('volCanvas',    times, rvAnn,  { color:'#fff', valueElId:'volVal', format:(v)=>formatVol(v) });
+  }
+
+  function formatNumber(v, dp) {
+    if (v == null || !isFinite(v)) return '--';
+    return Number(v).toFixed(dp);
+  }
+  function formatVol(v){
+    if (v == null || !isFinite(v)) return '--';
+    const a = Math.abs(v);
+    if (a >= 1) return v.toFixed(3);
+    if (a >= 0.01) return v.toFixed(4);
+    if (a >= 0.0001) return v.toFixed(6);
+    return v.toExponential(2);
+  }
+
+  // percentile helper
+  function percentile(arr, p) {
+    if (!arr || arr.length === 0) return null;
+    const a = arr.slice().sort((x,y)=>x-y);
+    const n = a.length;
+    const idx = (n - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (hi === lo) return a[lo];
+    const frac = idx - lo;
+    return a[lo] * (1 - frac) + a[hi] * frac;
+  }
+
+  // improved plotting: percentile-based clipping so a single spike doesn't flatten the plot
+  function plotCanvasLineAligned(canvasId, times, values, opts) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const defined = values.map((v,i)=> v==null? null : { i, v }).filter(Boolean);
+
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const DPR = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width  = Math.floor(rect.width * DPR);
+    canvas.height = Math.floor(rect.height * DPR);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+    ctx.clearRect(0,0,rect.width,rect.height);
+
+    if (!defined.length) {
+      const el = document.getElementById(opts.valueElId||'');
+      if (el) el.textContent='--';
+      drawTimeLabels(canvas, times);
+      return;
+    }
+
+    const numericValues = defined.map(d => d.v);
+    const lowP = percentile(numericValues, 0.05);
+    const highP = percentile(numericValues, 0.95);
+
+    let plotMin = (lowP == null ? Math.min(...numericValues) : lowP);
+    let plotMax = (highP == null ? Math.max(...numericValues) : highP);
+    if (!isFinite(plotMin) || !isFinite(plotMax) || plotMax === plotMin) {
+      plotMin = Math.min(...numericValues);
+      plotMax = Math.max(...numericValues);
+    }
+    const range = (plotMax - plotMin) || Math.abs(plotMax) || 1;
+
+    const padding = 12;
+    const w = rect.width - padding*2;
+    const h = rect.height - padding*2;
+
+    ctx.strokeStyle = opts.color || '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    defined.forEach((d, k) => {
+      let v = d.v;
+      if (v < plotMin) v = plotMin;
+      if (v > plotMax) v = plotMax;
+      const x = padding + (d.i / (values.length - 1)) * w;
+      const y = padding + h - ((v - plotMin) / range) * h;
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    if (opts.center !== undefined) {
+      const cy = padding + h - ((opts.center - plotMin) / range) * h;
+      ctx.setLineDash([5,5]);
+      ctx.strokeStyle = '#666';
+      ctx.beginPath(); ctx.moveTo(padding, cy); ctx.lineTo(padding + w, cy); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const last = defined[defined.length - 1].v;
+    const valEl = document.getElementById(opts.valueElId || '');
+    if (valEl) valEl.textContent = (opts.format ? opts.format(last) : String(last));
+
+    drawTimeLabels(canvas, times);
+  }
+
+  // draw left, center, right timestamps under the canvas
+  function drawTimeLabels(canvas, times){
+    if (!canvas || !Array.isArray(times) || times.length===0) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+
+    const labelHeight = 18;
+    ctx.clearRect(0, rect.height - labelHeight - 2, rect.width, labelHeight + 2);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '12px "Courier New", monospace';
+    ctx.textBaseline = 'top';
+
+    const leftT = new Date(times[0]*1000).toLocaleString();
+    const midT  = new Date(times[Math.floor(times.length/2)]*1000).toLocaleString();
+    const rightT= new Date(times[times.length-1]*1000).toLocaleString();
+
+    ctx.fillText(leftT, 6, rect.height - labelHeight + 0);
+    const midWidth = ctx.measureText(midT).width;
+    ctx.fillText(midT, Math.max((rect.width - midWidth)/2, 6), rect.height - labelHeight + 0);
+    const rightWidth = ctx.measureText(rightT).width;
+    ctx.fillText(rightT, Math.max(rect.width - rightWidth - 6, 6), rect.height - labelHeight + 0);
+  }
+
+  // immediate recompute after live tick so overlays and indicators stay aligned
+  function updateLive(price, isoTs) {
+    if (!candleSeries) return;
+    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
+    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
+    const p = Number(price);
+    let c = candleBuckets.get(bucket);
+    if (!c) {
+      c = { time: bucket, open: p, high: p, low: p, close: p };
+      candleBuckets.set(bucket, c);
+      currentCandles.push(c);
+      candleSeries.update(c);
+    } else {
+      c.high = Math.max(c.high, p);
+      c.low = Math.min(c.low, p);
+      c.close = p;
+      candleSeries.update(c);
+      const idx = currentCandles.findIndex(cc => cc.time === c.time);
+      if (idx >= 0) currentCandles[idx] = c;
+    }
+
+    // Immediate refresh so overlays + indicator canvases follow the new scale / spike
+    try { computeAndRenderIndicatorsFromCandles(); } catch (err) { console.warn('indicator recompute error', err); }
+  }
+
+  async function pollPriceOnce() {
+    try {
+      const res = await fetch('http://localhost:8000/api/price');
+      const d = await res.json();
+      document.getElementById('status').textContent = 'Connected - Live';
+      document.getElementById('status').style.color = 'green';
+      addRow(d);
+      updateLive(d.price, d.timestamp);
+    } catch(e) {
+      document.getElementById('status').textContent = 'Disconnected - retrying...';
+      document.getElementById('status').style.color = 'red';
+    }
+  }
+
+  function addRow(d) {
+    if (!d || d.price == null) return;
+    const tbody = document.getElementById('tbody');
+    const tr = document.createElement('tr');
+    const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
+    const ts = new Date(d.timestamp.replace(' ','T')).toLocaleTimeString([], {hour12:false});
+    const price = Number(d.price).toFixed(2);
+    const move = d.delta == null ? '' : `${d.delta>=0?'+':''}${Number(d.delta).toFixed(2)}`;
+    const pct = d.percent_change == null ? '' : `${d.percent_change>=0?'+':''}${Number(d.percent_change).toFixed(2)}%`;
+    tr.innerHTML = `<td>${ts}</td><td>$${price}</td><td class="${direction}">${move}</td><td class="${direction}">${pct}</td>`;
+    if (tbody.firstChild) tbody.insertBefore(tr, tbody.firstChild); else tbody.appendChild(tr);
+    while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
+  }
+
+  async function loadHistory(range='1h') {
+    try {
+      const params = { '1h':{m:60,res:'1',sec:60}, '1d':{m:24*60,res:'5',sec:300}, '1w':{m:7*24*60,res:'30',sec:1800}, '1m':{m:30*24*60,res:'60',sec:3600} }[range] || {m:60,res:'1',sec:60};
+      const url = `http://localhost:8000/api/history?minutes=${params.m}&resolution=${encodeURIComponent(params.res)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setHistory(data, params.sec);
+    } catch(e) { console.warn('history load failed', e); }
+  }
+
+  // buttons
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
+      ev.target.classList.add('active');
+      await loadHistory(ev.target.dataset.range || '1h');
+    });
+  });
+
+  // init viewer
+  ensureChart();
+  document.querySelector('.btn[data-range="1h"]').classList.add('active');
+  loadCryptos();
+  loadHistory('1h');
+  setInterval(pollPriceOnce, 1000);
+  setInterval(() => computeAndRenderIndicatorsFromCandles(), 2000);
+})();
+</script>
 </body>
 </html>
