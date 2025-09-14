@@ -5,7 +5,13 @@
 <title>Bitcoin Price - Clean Indicators (final)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://unpkg.com">
+<!-- Strategy UI styles -->
+<link rel="stylesheet" href="strategy.css">
+
 <style>
+  .price-up { color: #16a34a; font-weight: 600; }
+  .price-down { color: #dc2626; font-weight: 600; }
+
   html, body { height:100%; overflow:hidden; }
   body { background:#ffffff; margin:0; padding:12px; font-family:"Courier New", monospace; color:#111827; }
 
@@ -13,11 +19,9 @@
   .nav-btn{flex:1;padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer}
   .nav-btn.active{background:#111827;color:#fff;border-color:#111827}
 
-  /* screens */
   .screen { display:none; }
   .screen.active { display:block; }
 
-  /* Viewer layout */
   .layout{
     display:grid;
     grid-template-columns:320px 1fr;
@@ -52,10 +56,53 @@
     border:1px dashed #d1d5db;border-radius:8px;height:calc(var(--viewerHeight,50vh));display:flex;align-items:center;justify-content:center;color:#6b7280;
   }
 
+  /* Strategy Page Styles (kept as you provided) */
+  .strategy-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .strategy-header { text-align:center; margin-bottom:40px; }
+  .strategy-header h2 { font-size:2.5rem; font-weight:700; color:#111827; margin-bottom:8px; }
+  .strategy-header p { font-size:1.1rem; color:#6b7280; }
+
+  .strategy-cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap:24px; margin-bottom:40px; }
+
+  .strategy-card { background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); overflow:hidden; transition:all .3s; }
+  .strategy-card:hover { box-shadow:0 10px 25px -3px rgba(0,0,0,0.1); transform:translateY(-2px); }
+  .card-header { padding:24px 24px 16px; border-bottom:1px solid #f3f4f6; }
+  .card-header h3 { font-size:1.5rem; font-weight:600; margin:0; }
+  .commodity-card .card-header h3 { color:#f59e0b; }
+  .buy-card .card-header h3 { color:#10b981; }
+  .sell-card .card-header h3 { color:#ef4444; }
+  .card-content { padding:24px; }
+  .dropdown-section { margin-bottom:16px; }
+  .dropdown-item { margin-bottom:12px; }
+  .strategy-dropdown { width:100%; padding:12px 16px; border:2px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; color:#374151; transition:all .2s; }
+  .strategy-dropdown:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+
+  .add-btn { width:100%; padding:12px 16px; background:#f8fafc; border:2px dashed #d1d5db; border-radius:8px; color:#6b7280; font-size:14px; font-weight:500; cursor:pointer; }
+  .add-btn:hover { background:#f1f5f9; border-color:#94a3b8; color:#475569; }
+
+  .split-dropdown-container { display:flex; gap:8px; align-items:center; }
+  .split-left, .split-right { flex:1; }
+  .selected-option { padding:12px 16px; background:#f3f4f6; border:2px solid #d1d5db; border-radius:8px; text-align:center; font-weight:600; color:#374151; }
+  .option-text { font-size:14px; text-transform:uppercase; letter-spacing:.5px; }
+  .number-dropdown, .custom-number-input { width:100%; padding:12px 16px; border:2px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; color:#374151; transition:all .2s; margin-top:8px; }
+  .number-dropdown:focus, .custom-number-input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+
   @media (max-width:900px){
     .layout{grid-template-columns:1fr;grid-auto-rows:auto;}
     .left{order:2} .right{order:1}
+    .strategy-cards { grid-template-columns:1fr; }
   }
+
+  /* spacing between dropdown rows */
+  .str-rows, #strategyScreen .str-rows, #strategy-content .str-rows {
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .str-row { margin:0; }
 </style>
 </head>
 <body>
@@ -130,7 +177,118 @@
   </div>
 
   <div id="strategyScreen" class="screen">
-    <div class="center-screen">Strategy Builder — Coming Soon</div>
+    <!-- Strategy UI -->
+    <div class="strategy-container" id="strategyApp">
+      <!-- Card: Commodity -->
+      <div class="str-card" data-card="commodity">
+        <div class="str-card__header">Commodity</div>
+        <div class="str-card__body">
+          <div class="str-rows">
+            <div class="str-row" data-type="commodity">
+              <select class="str-select">
+                <option value="" selected disabled>Select…</option>
+                <option value="a">a</option>
+                <option value="b">b</option>
+                <option value="c">c</option>
+              </select>
+            </div>
+          </div>
+          <button class="str-add" type="button">(+)&nbsp;Add</button>
+          <div class="str-help">Add one or more items.</div>
+        </div>
+      </div>
+
+      <!-- Card: Buy -->
+      <div class="str-card" data-card="buy">
+        <div class="str-card__header">Buy</div>
+        <div class="str-card__body">
+          <div class="str-rows">
+            <div class="str-row" data-type="buy">
+              <select class="str-select">
+                <option value="" selected disabled>Select…</option>
+                <option value="a">a</option>
+                <option value="b">b</option>
+                <option value="c">c</option>
+              </select>
+            </div>
+          </div>
+          <button class="str-add" type="button">(+)&nbsp;Add</button>
+          <div class="str-help">Select an item, then enter a number.</div>
+        </div>
+      </div>
+
+      <!-- Card: Sell -->
+      <div class="str-card" data-card="sell">
+        <div class="str-card__header">Sell</div>
+        <div class="str-card__body">
+          <div class="str-rows">
+            <div class="str-row" data-type="sell">
+              <select class="str-select">
+                <option value="" selected disabled>Select…</option>
+                <option value="a">a</option>
+                <option value="b">b</option>
+                <option value="c">c</option>
+              </select>
+            </div>
+          </div>
+          <button class="str-add" type="button">(+)&nbsp;Add</button>
+          <div class="str-help">Select an item, then enter a number.</div>
+        </div>
+      </div>
+    </div>
+
+    <datalist id="qtySuggestions">
+      <option value="1"></option>
+      <option value="5"></option>
+      <option value="10"></option>
+    </datalist>
+
+    <!-- Scoped strategy styles (kept) -->
+    <style>
+      #strategyScreen .strategy-container{
+        padding:12px;
+        display:grid;
+        grid-template-columns:repeat(3, minmax(260px, 1fr));
+        gap:12px;
+      }
+      #strategyScreen .str-card{
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:12px;
+        box-shadow:0 8px 24px rgba(0,0,0,.08);
+        display:flex; flex-direction:column; min-height:260px;
+      }
+      #strategyScreen .str-card__header{
+        padding:12px 14px; border-bottom:1px solid #f2f3f5;
+        font-weight:700; color:#111827; display:flex; align-items:center; justify-content:space-between;
+      }
+      #strategyScreen .str-card__body{ padding:12px; display:flex; flex-direction:column; gap:10px; }
+      #strategyScreen .str-row{ display:flex; align-items:center; gap:8px; width:100%; }
+      #strategyScreen .str-select{
+        appearance:none; background:#f9fafb; border:1px solid #d1d5db; border-radius:10px;
+        padding:10px 12px; color:#111827; font-family:"Courier New", monospace; font-size:14px; flex:1; cursor:pointer;
+      }
+      #strategyScreen .str-select:focus{ outline:2px solid #11182722; }
+      #strategyScreen .str-add{
+        align-self:flex-start; margin-top:2px; padding:8px 10px; border-radius:10px;
+        background:#f9fafb; border:1px dashed #9ca3af; color:#111827; cursor:pointer;
+        font-family:"Courier New", monospace; font-size:14px;
+      }
+      #strategyScreen .str-add:hover{ background:#eef2f7; }
+      #strategyScreen .str-split{ display:flex; gap:8px; width:100%; }
+      #strategyScreen .str-pill{
+        flex:1; border-radius:10px; background:#111827; color:#fff; border:none; padding:10px 12px; text-align:left;
+        font-family:"Courier New", monospace; font-size:14px; cursor:pointer;
+      }
+      #strategyScreen .str-number{
+        flex:1; background:#fff; border:1px solid #d1d5db; border-radius:10px; padding:10px 12px;
+        font-family:"Courier New", monospace; font-size:14px;
+      }
+      #strategyScreen .str-help{ margin-top:2px; font-size:12px; color:#6b7280; }
+      @media (max-width:1000px){ #strategyScreen .strategy-container{ grid-template-columns:1fr; } }
+    </style>
+
+    <!-- NOTE: removed the inline strategy script that previously conflicted with the price addRow -->
   </div>
 
   <div id="backtestScreen" class="screen">
@@ -138,9 +296,13 @@
   </div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+
+<!-- keep one external strategy.js if you have it; defer load so it doesn't race -->
+<script defer src="strategy.js"></script>
+
 <script>
 (() => {
-  // ---------- view switching ----------
+  // view switching
   const navBtns = document.querySelectorAll('.nav-btn');
   const screens = {
     viewer: document.getElementById('viewerScreen'),
@@ -152,14 +314,15 @@
   function setActiveView(name){
     Object.values(screens).forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    screens[name].classList.add('active');
-    document.querySelector(`.nav-btn[data-view="${name}"]`).classList.add('active');
+    if (screens[name]) screens[name].classList.add('active');
+    const btn = document.querySelector(`.nav-btn[data-view="${name}"]`);
+    if (btn) btn.classList.add('active');
     topbarLeft.style.display = (name === 'viewer') ? 'flex' : 'none';
     if (name === 'viewer') adjustViewerHeight();
   }
   navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-  // ---------- lock viewer height ----------
+  // viewer height
   const navCard = document.querySelector('.nav-card');
   const topbar  = document.getElementById('topbar');
   const viewerLayout = document.getElementById('viewerLayout');
@@ -173,7 +336,7 @@
   window.addEventListener('resize', adjustViewerHeight);
   requestAnimationFrame(adjustViewerHeight);
 
-  // ---------- crypto dropdown ----------
+  // crypto dropdown
   const cryptoSelect = document.getElementById('cryptoSelect');
   const tickerEl = document.getElementById('ticker');
 
@@ -209,7 +372,7 @@
   }
   cryptoSelect.addEventListener('change', (e)=> changeCrypto(e.target.value));
 
-  // ---------- viewer logic ----------
+  // viewer/chart state
   let chart = null;
   let candleSeries = null;
   let overlaySeries = { ema12: null, ema26: null, bbUpper: null, bbLower: null };
@@ -260,7 +423,7 @@
     computeAndRenderIndicatorsFromCandles();
   }
 
-  // ---- indicator math ----
+  // indicator math
   function ema(values, span) {
     const k = 2 / (span + 1);
     const out = []; let prev = null;
@@ -272,8 +435,6 @@
     for (let i=0;i<values.length;i++){ sum += values[i]; if(i>=w) sum -= values[i-w]; if(i>=w-1) out[i]=sum/w; }
     return out;
   }
-
-  // sample std using available window (n-1) for early indices
   function rollingStd(values, w) {
     const out = new Array(values.length).fill(null);
     for (let i=0;i<values.length;i++){
@@ -305,15 +466,12 @@
     const bbUpper = std20.map((s,i)=> s==null||sma20[i]==null? null : sma20[i] + 2*s);
     const bbLower = std20.map((s,i)=> s==null||sma20[i]==null? null : sma20[i] - 2*s);
 
-    // use log returns and make first element 0
     const ret = closes.map((v,i)=> i===0 ? 0 : Math.log(v / closes[i-1]));
 
-    // rolling mean/std for zscore using the updated rollingStd
     const rMean = rollingMean(ret, 20);
     const rStd  = rollingStd(ret, 20).map(s => (s==null || s === 0) ? 1e-12 : s);
     const zscore = ret.map((r,i)=> rMean[i]==null? null : (r - rMean[i]) / rStd[i]);
 
-    // realized volatility: rolling std of log returns (per-period) then annualize
     const rv = rollingStd(ret, 20);
     const secondsPerYear = 365 * 24 * 3600;
     const periodsPerYear = secondsPerYear / Math.max(1, currentIntervalSec);
@@ -344,7 +502,6 @@
     return v.toExponential(2);
   }
 
-  // percentile helper
   function percentile(arr, p) {
     if (!arr || arr.length === 0) return null;
     const a = arr.slice().sort((x,y)=>x-y);
@@ -357,7 +514,6 @@
     return a[lo] * (1 - frac) + a[hi] * frac;
   }
 
-  // improved plotting: percentile-based clipping so a single spike doesn't flatten the plot
   function plotCanvasLineAligned(canvasId, times, values, opts) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
@@ -423,7 +579,6 @@
     drawTimeLabels(canvas, times);
   }
 
-  // draw left, center, right timestamps under the canvas
   function drawTimeLabels(canvas, times){
     if (!canvas || !Array.isArray(times) || times.length===0) return;
     const ctx = canvas.getContext('2d');
@@ -451,7 +606,7 @@
     ctx.fillText(rightT, Math.max(rect.width - rightWidth - 6, 6), rect.height - labelHeight + 0);
   }
 
-  // immediate recompute after live tick so overlays and indicators stay aligned
+  // update live tick
   function updateLive(price, isoTs) {
     if (!candleSeries) return;
     const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
@@ -472,8 +627,33 @@
       if (idx >= 0) currentCandles[idx] = c;
     }
 
-    // Immediate refresh so overlays + indicator canvases follow the new scale / spike
     try { computeAndRenderIndicatorsFromCandles(); } catch (err) { console.warn('indicator recompute error', err); }
+  }
+
+  // addRow for the price table — colored price cell based on delta
+  function addRow(d) {
+    if (!d || d.price == null) return;
+    const tbody = document.getElementById('tbody');
+    const tr = document.createElement('tr');
+
+    const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
+    const priceClass = direction === 'up' ? 'price-up' : (direction === 'down' ? 'price-down' : '');
+
+    const ts = new Date((d.timestamp || '').replace(' ', 'T')).toLocaleTimeString([], { hour12: false });
+    const price = Number(d.price).toFixed(2);
+    const move = d.delta == null ? '' : `${d.delta >= 0 ? '+' : ''}${Number(d.delta).toFixed(2)}`;
+    const pct = d.percent_change == null ? '' : `${d.percent_change >= 0 ? '+' : ''}${Number(d.percent_change).toFixed(2)}%`;
+
+    tr.className = 'newest';
+    tr.innerHTML = `<td class="mono">${ts}</td>
+                    <td class="mono ${priceClass}">$${price}</td>
+                    <td class="mono ${direction}">${move}</td>
+                    <td class="mono ${direction}">${pct}</td>`;
+
+    if (tbody.firstChild) { tbody.firstChild.classList.remove('newest'); tbody.insertBefore(tr, tbody.firstChild); }
+    else { tbody.appendChild(tr); }
+
+    while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
   }
 
   async function pollPriceOnce() {
@@ -490,20 +670,6 @@
     }
   }
 
-  function addRow(d) {
-    if (!d || d.price == null) return;
-    const tbody = document.getElementById('tbody');
-    const tr = document.createElement('tr');
-    const direction = (d.delta || 0) > 0 ? 'up' : ((d.delta || 0) < 0 ? 'down' : 'flat');
-    const ts = new Date(d.timestamp.replace(' ','T')).toLocaleTimeString([], {hour12:false});
-    const price = Number(d.price).toFixed(2);
-    const move = d.delta == null ? '' : `${d.delta>=0?'+':''}${Number(d.delta).toFixed(2)}`;
-    const pct = d.percent_change == null ? '' : `${d.percent_change>=0?'+':''}${Number(d.percent_change).toFixed(2)}%`;
-    tr.innerHTML = `<td>${ts}</td><td>$${price}</td><td class="${direction}">${move}</td><td class="${direction}">${pct}</td>`;
-    if (tbody.firstChild) tbody.insertBefore(tr, tbody.firstChild); else tbody.appendChild(tr);
-    while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
-  }
-
   async function loadHistory(range='1h') {
     try {
       const params = { '1h':{m:60,res:'1',sec:60}, '1d':{m:24*60,res:'5',sec:300}, '1w':{m:7*24*60,res:'30',sec:1800}, '1m':{m:30*24*60,res:'60',sec:3600} }[range] || {m:60,res:'1',sec:60};
@@ -514,7 +680,7 @@
     } catch(e) { console.warn('history load failed', e); }
   }
 
-  // buttons
+  // timeframe buttons
   document.querySelectorAll('.btn').forEach(btn => {
     btn.addEventListener('click', async (ev) => {
       document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
@@ -523,7 +689,7 @@
     });
   });
 
-  // init viewer
+  // init
   ensureChart();
   document.querySelector('.btn[data-range="1h"]').classList.add('active');
   loadCryptos();
@@ -532,5 +698,71 @@
   setInterval(() => computeAndRenderIndicatorsFromCandles(), 2000);
 })();
 </script>
+
+<!-- Strategy UI behavior (delegated; keeps working even if DOM changes) -->
+<script>
+(function(){
+  if (!document.getElementById('qtySuggestions')) {
+    const dl = document.createElement('datalist');
+    dl.id = 'qtySuggestions';
+    dl.innerHTML = '<option value="1"></option><option value="5"></option><option value="10"></option>';
+    document.body.appendChild(dl);
+  }
+
+  function selectHTML(pre){
+    return `
+      <select class="str-select">
+        <option value="" ${pre ? '' : 'selected'} disabled>Select…</option>
+        <option value="a" ${pre==='a'?'selected':''}>a</option>
+        <option value="b" ${pre==='b'?'selected':''}>b</option>
+        <option value="c" ${pre==='c'?'selected':''}>c</option>
+      </select>
+    `;
+  }
+  function splitHTML(val, type){
+    return `
+      <div class="str-split">
+        <button type="button" class="str-pill" data-value="${val}" aria-label="${type} selection">${val}</button>
+        <input class="str-number" type="number" placeholder="Enter number" min="0" step="1" list="qtySuggestions" />
+      </div>
+    `;
+  }
+
+  document.addEventListener('click', function(e){
+    const addBtn = e.target.closest('#strategyScreen .str-add, #strategy-content .str-add');
+    if (!addBtn) return;
+    const card   = addBtn.closest('.str-card');
+    const rowsEl = card.querySelector('.str-rows');
+    const type   = card.dataset.card;
+    const row    = document.createElement('div');
+    row.className = 'str-row';
+    row.dataset.type = type;
+    row.innerHTML = selectHTML();
+    rowsEl.appendChild(row);
+  });
+
+  document.addEventListener('change', function(e){
+    const sel = e.target.closest('#strategyScreen .str-select, #strategy-content .str-select');
+    if (!sel) return;
+    const row  = sel.closest('.str-row');
+    const type = row?.dataset?.type;
+    const val  = sel.value;
+    if (!val) return;
+    if (type === 'buy' || type === 'sell') {
+      row.innerHTML = splitHTML(val, type);
+    }
+  });
+
+  document.addEventListener('click', function(e){
+    const pill = e.target.closest('#strategyScreen .str-pill, #strategy-content .str-pill');
+    if (!pill) return;
+    const row     = pill.closest('.str-row');
+    const type    = row?.dataset?.type || 'buy';
+    const current = pill.dataset.value || 'a';
+    row.innerHTML = selectHTML(current);
+  });
+})();
+</script>
+
 </body>
 </html>
