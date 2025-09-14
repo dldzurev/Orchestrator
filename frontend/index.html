@@ -19,6 +19,10 @@
   .nav-btn{flex:1;padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer}
   .nav-btn.active{background:#111827;color:#fff;border-color:#111827}
 
+  /* NEW: small auxiliary button style (does NOT participate in view switching) */
+  .nav-btn-aux{padding:8px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer;flex:0}
+  .nav-btn-aux:hover{background:#f3f4f6}
+
   .screen { display:none; }
   .screen.active { display:block; }
 
@@ -167,6 +171,38 @@
   @media (max-width:900px){
     #backtestScreen .backtest-layout{ grid-template-columns:1fr; }
   }
+
+  /* ====== NEW: Floating AI Chat Card ====== */
+  .ai-card{
+    position:fixed; right:16px; bottom:16px;
+    width:340px; max-width:90vw; height:380px; max-height:70vh;
+    background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+    box-shadow:0 12px 32px rgba(0,0,0,.15);
+    display:flex; flex-direction:column; z-index:1000; overflow:hidden;
+  }
+  .ai-card[hidden]{ display:none !important; }
+  .ai-card-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px; border-bottom:1px solid #e5e7eb; font-weight:700;
+  }
+  .ai-card-body{ flex:1; display:flex; flex-direction:column; padding:8px; gap:8px; min-height:0; }
+  .ai-msgs{
+    flex:1; overflow:auto; border:1px solid #e5e7eb; border-radius:8px;
+    padding:8px; font-size:13px; background:#fff;
+  }
+  .ai-input{ display:flex; gap:6px; }
+  .ai-input input{
+    flex:1; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px;
+    font-family:"Courier New", monospace;
+  }
+  .ai-input button{
+    border:1px solid #111827; background:#111827; color:#fff;
+    border-radius:8px; padding:8px 12px; cursor:pointer;
+  }
+  .ai-close{ border:1px solid #d1d5db; background:#f9fafb; border-radius:6px; padding:4px 8px; cursor:pointer; }
+  .message{ margin:6px 0; }
+  .message.you{ color:#111827; }
+  .message.bot{ color:#374151; }
 </style>
 </head>
 <body>
@@ -174,6 +210,8 @@
     <button class="nav-btn active" data-view="viewer">Viewer</button>
     <button class="nav-btn" data-view="strategy">Strategy</button>
     <button class="nav-btn" data-view="backtest">Backtest</button>
+    <!-- NEW: small AI chat toggle button (does not switch views) -->
+    <button class="nav-btn-aux" id="aiChatToggle" type="button" title="Ask quick finance questions">AI Chat</button>
     <!-- removed top-right "Strategies" chip per request -->
   </div>
 
@@ -433,6 +471,22 @@
       <div id="strategyList"></div>
     </div>
     <div class="drawer-tab" id="drawerToggleSide" title="Open/Close strategies">STRATEGIES</div>
+  </div>
+
+  <!-- NEW: Floating AI Chat Card -->
+  <div class="ai-card" id="aiChatCard" hidden>
+    <div class="ai-card-head">
+      <div>AI Finance Chat</div>
+      <button class="ai-close" id="aiChatClose" type="button" aria-label="Close AI Chat">×</button>
+    </div>
+    <div class="ai-card-body">
+      <div id="aiMsgs" class="ai-msgs" aria-live="polite"></div>
+      <div class="ai-input">
+        <input id="aiInput" type="text" placeholder="Ask about finance… (short answers)" />
+        <button id="aiSend" type="button">Send</button>
+      </div>
+      <div id="aiErr" style="color:#dc2626;font-size:12px;"></div>
+    </div>
   </div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -1636,6 +1690,76 @@ tbody.addEventListener('click', (e)=>{
       window.__btRefresh.refreshTable();
     }
   }
+})();
+</script>
+
+<!-- NEW: AI Chat logic (isolated; no interference with existing code) -->
+<script>
+(() => {
+  const toggleBtn = document.getElementById('aiChatToggle');
+  const panel     = document.getElementById('aiChatCard');
+  const closeBtn  = document.getElementById('aiChatClose');
+  const msgs      = document.getElementById('aiMsgs');
+  const input     = document.getElementById('aiInput');
+  const sendBtn   = document.getElementById('aiSend');
+  const errEl     = document.getElementById('aiErr');
+
+  const API_KEY  = 'AIzaSyBv3WMJ1W-uNYetCi8hNm2EsQnhjocSAEs';
+  const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+  function openPanel(){ panel.hidden = false; setTimeout(()=>input.focus(), 0); }
+  function closePanel(){ panel.hidden = true; }
+  function togglePanel(){ panel.hidden ? openPanel() : closePanel(); }
+
+  toggleBtn.addEventListener('click', togglePanel);
+  closeBtn.addEventListener('click', closePanel);
+
+  function addMsg(text, who){
+    const div = document.createElement('div');
+    div.className = 'message ' + (who || 'bot');
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  async function askGemini(q){
+    errEl.textContent = '';
+    const prompt = `You are a concise finance assistant. Answer in <= 2 sentences. If the question isn't about finance/markets, politely decline.\n\nQuestion: ${q}`;
+    try{
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-goog-api-key': API_KEY },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '';
+      if (!text) throw new Error(data?.error?.message || 'No response');
+      return text.trim();
+    }catch(e){
+      errEl.textContent = 'Gemini error: ' + (e?.message || String(e));
+      return null;
+    }
+  }
+
+  async function send(){
+    const q = (input.value || '').trim();
+    if (!q) return;
+    addMsg(q, 'you');
+    input.value = '';
+    sendBtn.disabled = true; const prev = sendBtn.textContent; sendBtn.textContent = '...';
+    const reply = await askGemini(q);
+    if (reply) addMsg(reply, 'bot');
+    sendBtn.disabled = false; sendBtn.textContent = prev;
+    openPanel();
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      send();
+    }
+  });
 })();
 </script>
 
