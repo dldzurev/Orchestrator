@@ -1,108 +1,112 @@
 :root{
-    --card-bg:#ffffff;
-    --card-border:#e5e7eb;
-    --card-shadow:0 8px 24px rgba(0,0,0,.08);
-    --ink:#111827;
-    --muted:#6b7280;
-    --control:#f9fafb;
-    --control-border:#d1d5db;
-  }
-  .strategy-container{
-    padding:12px;
-    display:grid;
-    grid-template-columns:repeat(3, minmax(260px, 1fr));
-    gap:12px;
-  }
-  .str-card{
-    background:var(--card-bg);
-    border:1px solid var(--card-border);
-    border-radius:12px;
-    box-shadow:var(--card-shadow);
-    display:flex;
-    flex-direction:column;
-    min-height:260px;
-  }
-  .str-card__header{
-    padding:12px 14px;
-    border-bottom:1px solid #f2f3f5;
-    font-weight:700;
-    color:var(--ink);
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-  }
-  .str-card__body{
-    padding:12px;
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-  }
-  .str-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    width:100%;
-  }
-  .str-select{
-    appearance:none;
-    -webkit-appearance:none;
-    -moz-appearance:none;
-    background:var(--control);
-    border:1px solid var(--control-border);
-    border-radius:10px;
-    padding:10px 12px;
-    color:var(--ink);
-    font-family:"Courier New", monospace;
-    font-size:14px;
-    flex:1;
-    cursor:pointer;
-  }
-  .str-select:focus{ outline:2px solid #11182722; }
-  .str-add{
-    align-self:flex-start;
-    margin-top:2px;
-    padding:8px 10px;
-    border-radius:10px;
-    background:var(--control);
-    border:1px dashed #9ca3af;
-    color:var(--ink);
-    cursor:pointer;
-    font-family:"Courier New", monospace;
-    font-size:14px;
-  }
-  .str-add:hover{ background:#eef2f7; }
-  .str-split{
-    display:flex;
-    gap:8px;
-    width:100%;
-  }
-  .str-pill{
-    flex:1;
-    border-radius:10px;
-    background:#111827;
-    color:#fff;
-    border:none;
-    padding:10px 12px;
-    text-align:left;
-    font-family:"Courier New", monospace;
-    font-size:14px;
-    cursor:pointer; /* click to re-edit the left side */
-  }
-  .str-number{
-    flex:1;
-    background:#fff;
-    border:1px solid var(--control-border);
-    border-radius:10px;
-    padding:10px 12px;
-    font-family:"Courier New", monospace;
-    font-size:14px;
-  }
-  .str-help{
-    margin-top:2px;
-    font-size:12px;
-    color:var(--muted);
-  }
-  @media (max-width: 1000px){
-    .strategy-container{ grid-template-columns:1fr; }
-  }
-  
+  --card-bg:#ffffff;
+  --card-border:#e5e7eb;
+  --card-shadow:0 8px 24px rgba(0,0,0,.08);
+  --ink:#111827;
+  --muted:#6b7280;
+  --control:#f9fafb;
+  --control-border:#d1d5db;
+}
+
+.strategy-container{
+  padding:12px;
+  display:grid;
+  grid-template-columns:repeat(3, minmax(260px, 1fr));
+  gap:12px;
+}
+.str-card{
+  background:var(--card-bg);
+  border:1px solid var(--card-border);
+  border-radius:12px;
+  box-shadow:var(--card-shadow);
+  display:flex;
+  flex-direction:column;
+  min-height:260px;
+}
+.str-card__header{
+  padding:12px 14px;
+  border-bottom:1px solid #f2f3f5;
+  font-weight:700;
+  color:var(--ink);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.str-card__body{
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.str-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+}
+.str-select{
+  appearance:none;
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  background:var(--control);
+  border:1px solid var(--control-border);
+  border-radius:10px;
+  padding:10px 12px;
+  color:var(--ink);
+  font-family:"Courier New", monospace;
+  font-size:14px;
+  flex:1;
+  cursor:pointer;
+}
+.str-select:focus{ outline:2px solid #11182722; }
+
+.str-add{
+  align-self:flex-start;
+  margin-top:2px;
+  padding:8px 10px;
+  border-radius:10px;
+  background:var(--control);
+  border:1px dashed #9ca3af;
+  color:var(--ink);
+  cursor:pointer;
+  font-family:"Courier New", monospace;
+  font-size:14px;
+}
+.str-add:hover{ background:#eef2f7; }
+
+.str-split{
+  display:flex;
+  gap:8px;
+  width:100%;
+}
+.str-pill{
+  flex:1;
+  border-radius:10px;
+  background:#111827;
+  color:#fff;
+  border:none;
+  padding:10px 12px;
+  text-align:left;
+  font-family:"Courier New", monospace;
+  font-size:14px;
+  cursor:pointer; /* click to re-edit the left side */
+}
+.str-number{
+  flex:1;
+  background:#fff;
+  border:1px solid var(--control-border);
+  border-radius:10px;
+  padding:10px 12px;
+  font-family:"Courier New", monospace;
+  font-size:14px;
+}
+
+.str-help{
+  margin-top:2px;
+  font-size:12px;
+  color:var(--muted);
+}
+
+@media (max-width: 1000px){
+  .strategy-container{ grid-template-columns:1fr; }
+}

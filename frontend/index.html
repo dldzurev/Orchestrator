@@ -5,7 +5,6 @@
 <title>Bitcoin Price - Clean Indicators (final)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://unpkg.com">
-<!-- Strategy UI styles -->
 <link rel="stylesheet" href="strategy.css">
 
 <style>
@@ -13,9 +12,10 @@
   .price-down { color: #dc2626; font-weight: 600; }
 
   html, body { height:100%; overflow:hidden; }
-  body { background:#ffffff; margin:0; padding:12px; font-family:"Courier New", monospace; color:#111827; }
+  /* shift everything right so the vertical strategies tab never overlaps content */
+  body { background:#ffffff; margin:0; padding:12px 12px 12px 64px; font-family:"Courier New", monospace; color:#111827; }
 
-  .nav-card { background:#f8f9fa;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;gap:8px; }
+  .nav-card { background:#f8f9fa;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;gap:8px; align-items:center; }
   .nav-btn{flex:1;padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer}
   .nav-btn.active{background:#111827;color:#fff;border-color:#111827}
 
@@ -56,53 +56,117 @@
     border:1px dashed #d1d5db;border-radius:8px;height:calc(var(--viewerHeight,50vh));display:flex;align-items:center;justify-content:center;color:#6b7280;
   }
 
-  /* Strategy Page Styles (kept as you provided) */
-  .strategy-container {
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .strategy-header { text-align:center; margin-bottom:40px; }
-  .strategy-header h2 { font-size:2.5rem; font-weight:700; color:#111827; margin-bottom:8px; }
-  .strategy-header p { font-size:1.1rem; color:#6b7280; }
-
-  .strategy-cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap:24px; margin-bottom:40px; }
-
-  .strategy-card { background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); overflow:hidden; transition:all .3s; }
-  .strategy-card:hover { box-shadow:0 10px 25px -3px rgba(0,0,0,0.1); transform:translateY(-2px); }
-  .card-header { padding:24px 24px 16px; border-bottom:1px solid #f3f4f6; }
-  .card-header h3 { font-size:1.5rem; font-weight:600; margin:0; }
-  .commodity-card .card-header h3 { color:#f59e0b; }
-  .buy-card .card-header h3 { color:#10b981; }
-  .sell-card .card-header h3 { color:#ef4444; }
-  .card-content { padding:24px; }
-  .dropdown-section { margin-bottom:16px; }
-  .dropdown-item { margin-bottom:12px; }
-  .strategy-dropdown { width:100%; padding:12px 16px; border:2px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; color:#374151; transition:all .2s; }
-  .strategy-dropdown:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
-
-  .add-btn { width:100%; padding:12px 16px; background:#f8fafc; border:2px dashed #d1d5db; border-radius:8px; color:#6b7280; font-size:14px; font-weight:500; cursor:pointer; }
-  .add-btn:hover { background:#f1f5f9; border-color:#94a3b8; color:#475569; }
-
-  .split-dropdown-container { display:flex; gap:8px; align-items:center; }
-  .split-left, .split-right { flex:1; }
-  .selected-option { padding:12px 16px; background:#f3f4f6; border:2px solid #d1d5db; border-radius:8px; text-align:center; font-weight:600; color:#374151; }
-  .option-text { font-size:14px; text-transform:uppercase; letter-spacing:.5px; }
-  .number-dropdown, .custom-number-input { width:100%; padding:12px 16px; border:2px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; color:#374151; transition:all .2s; margin-top:8px; }
-  .number-dropdown:focus, .custom-number-input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
-
   @media (max-width:900px){
     .layout{grid-template-columns:1fr;grid-auto-rows:auto;}
     .left{order:2} .right{order:1}
-    .strategy-cards { grid-template-columns:1fr; }
   }
 
-  /* spacing between dropdown rows */
-  .str-rows, #strategyScreen .str-rows, #strategy-content .str-rows {
-    display:flex; flex-direction:column; gap:10px;
-  }
+  /* Strategy shared */
+  .str-rows{ display:flex; flex-direction:column; gap:10px; }
   .str-row { margin:0; }
+
+  /* Schedule card */
+  #strategyScreen .str-card--wide { grid-column: 1 / -1; }
+  #strategyScreen .mode-row { display:flex; gap:12px; align-items:center; }
+  #strategyScreen .mode-option { display:flex; align-items:center; gap:6px; font-weight:700; color:#111827; }
+  #strategyScreen .time-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:8px; }
+  #strategyScreen .time-title { font-weight:700; color:#111827; margin-bottom:4px; }
+  #strategyScreen .time-row { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; }
+  #strategyScreen .time-row select {
+    appearance:none; background:#f9fafb; border:1px solid #d1d5db; border-radius:10px;
+    padding:10px 12px; color:#111827; font-family:"Courier New", monospace; font-size:14px;
+  }
+  #strategyScreen .invalid .time-row select { border-color:#dc2626; }
+  #scheduleError { margin-top:6px; }
+
+  /* Submit row */
+  #strategyScreen .submit-row{
+    grid-column: 1 / -1;
+    display:flex; justify-content:center; align-items:center; padding:8px 0 4px;
+  }
+  #strategyScreen .submit-btn{
+    background:#111827; color:#fff; border:1px solid #111827; border-radius:10px;
+    padding:12px 24px; font-weight:700; letter-spacing:.5px; cursor:pointer;
+  }
+  #strategyScreen .submit-btn[disabled]{ opacity:.4; cursor:not-allowed; }
+
+  /* Strategies drawer: off-screen when closed; vertical tab is ALWAYS visible & clickable */
+  .drawer{
+    position:fixed; left:-320px; top:0; bottom:0; width:320px; z-index:50;
+    transition:left .25s ease-in-out;
+  }
+  .drawer.open{ left:0; }
+  .drawer .drawer-body{
+    position:absolute; left:0; top:0; bottom:0; width:320px; background:#ffffff; border-right:1px solid #e5e7eb;
+    box-shadow: 4px 0 20px rgba(0,0,0,.08); padding:10px; overflow:auto;
+  }
+  /* Fixed vertical tab that stays at the very left edge of the viewport at all times */
+  /* Make the tab travel with the drawer (anchored to its right edge) */
+  .drawer .drawer-tab{
+    position:absolute; left:320px; top:120px; /* 320px = drawer width */
+    width:44px; height:140px; border-top-right-radius:10px; border-bottom-right-radius:10px;
+    background:#111827; color:#fff; writing-mode:vertical-rl; text-orientation:mixed;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
+    font-weight:700; letter-spacing:.5px; z-index:60;
+  }
+
+  .drawer h3{ margin:6px 6px 8px; font-size:16px; }
+  .strategy-card{
+    border:1px solid #e5e7eb; border-radius:10px; padding:10px; margin:8px 4px;
+    background:#fff;
+  }
+  .strategy-card .title{ font-weight:700; margin-bottom:6px; }
+  .kv{ font-size:12px; color:#374151; margin:2px 0; }
+  .kv strong{ color:#111827; }
+
+  /* Backtest UI */
+  #backtestScreen .backtest-wrap{
+    padding:12px;
+    height:calc(var(--viewerHeight, 60vh));
+    display:flex; flex-direction:column; gap:12px;
+  }
+  #backtestScreen .backtest-layout{
+    display:grid; grid-template-columns: 2fr 1fr; gap:12px; min-height:0; flex:1;
+  }
+  #backtestScreen .bt-left{
+    overflow:auto; border:1px solid #e5e7eb; border-radius:8px; background:#fff; min-height:0;
+  }
+  #backtestScreen .bt-right{ overflow:auto; }
+
+  #backtestScreen .bt-table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  #backtestScreen .bt-table thead th{
+    position:sticky; top:0; background:#fff; border-bottom:2px solid #111827;
+    text-align:left; padding:10px; font-weight:700;
+  }
+  #backtestScreen .bt-table td{
+  border-bottom:1px solid #e5e7eb; padding:10px; vertical-align:top;
+  white-space: normal;            /* allow multi-line */
+  word-break: break-word;         /* prevent long tokens from overflowing */
+}
+
+  #backtestScreen .bt-table tr{ cursor:pointer; }
+  #backtestScreen .bt-table tbody tr:hover{ background:#f9fafb; }
+  #backtestScreen .bt-summary{
+  color:#374151; font-size:12px; line-height:1.4;
+  white-space: normal;            /* multi-line summary */
+  overflow-wrap: anywhere;        /* break very long strings */
+}
+
+
+  #backtestScreen .bt-card{
+    border:1px solid #e5e7eb; border-radius:8px; background:#fff; padding:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.06);
+  }
+  #backtestScreen .bt-card-head{
+    display:flex; align-items:center; justify-content:space-between; font-weight:700; margin-bottom:8px;
+  }
+  #backtestScreen .bt-x{
+    border:1px solid #d1d5db; background:#f9fafb; border-radius:6px; padding:2px 8px; cursor:pointer;
+  }
+
+  @media (max-width:900px){
+    #backtestScreen .backtest-layout{ grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
@@ -110,6 +174,7 @@
     <button class="nav-btn active" data-view="viewer">Viewer</button>
     <button class="nav-btn" data-view="strategy">Strategy</button>
     <button class="nav-btn" data-view="backtest">Backtest</button>
+    <!-- removed top-right "Strategies" chip per request -->
   </div>
 
   <div id="topbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -170,6 +235,7 @@
               </div>
             </div>
           </div>
+
         </div>
 
       </div>
@@ -177,9 +243,8 @@
   </div>
 
   <div id="strategyScreen" class="screen">
-    <!-- Strategy UI -->
     <div class="strategy-container" id="strategyApp">
-      <!-- Card: Commodity -->
+      <!-- Commodity -->
       <div class="str-card" data-card="commodity">
         <div class="str-card__header">Commodity</div>
         <div class="str-card__body">
@@ -194,11 +259,11 @@
             </div>
           </div>
           <button class="str-add" type="button">(+)&nbsp;Add</button>
-          <div class="str-help">Add one or more items.</div>
+          <div class="str-help">Choose one or more coins (no duplicates).</div>
         </div>
       </div>
 
-      <!-- Card: Buy -->
+      <!-- Buy -->
       <div class="str-card" data-card="buy">
         <div class="str-card__header">Buy</div>
         <div class="str-card__body">
@@ -213,11 +278,11 @@
             </div>
           </div>
           <button class="str-add" type="button">(+)&nbsp;Add</button>
-          <div class="str-help">Select an item, then enter a number.</div>
+          <div class="str-help">Select an indicator/price, then enter a number (no duplicates).</div>
         </div>
       </div>
 
-      <!-- Card: Sell -->
+      <!-- Sell -->
       <div class="str-card" data-card="sell">
         <div class="str-card__header">Sell</div>
         <div class="str-card__body">
@@ -232,8 +297,47 @@
             </div>
           </div>
           <button class="str-add" type="button">(+)&nbsp;Add</button>
-          <div class="str-help">Select an item, then enter a number.</div>
+          <div class="str-help">Same options as Buy (no duplicates).</div>
         </div>
+      </div>
+
+      <!-- Schedule (wide) -->
+      <div class="str-card str-card--wide" data-card="schedule" id="scheduleCard">
+        <div class="str-card__header">Schedule</div>
+        <div class="str-card__body">
+          <div class="mode-row" role="radiogroup" aria-label="Mode">
+            <label class="mode-option"><input type="radio" name="schedMode" value="backtest" checked> Backtest</label>
+            <label class="mode-option"><input type="radio" name="schedMode" value="execute"> Execute</label>
+          </div>
+
+          <div class="time-grid">
+            <div class="time-col" id="startCol">
+              <div class="time-title">Start</div>
+              <div class="time-row">
+                <select class="time-year"  data-role="start"></select>
+                <select class="time-month" data-role="start"></select>
+                <select class="time-day"   data-role="start"></select>
+                <select class="time-hour"  data-role="start"></select>
+              </div>
+            </div>
+            <div class="time-col" id="endCol">
+              <div class="time-title">End</div>
+              <div class="time-row">
+                <select class="time-year"  data-role="end"></select>
+                <select class="time-month" data-role="end"></select>
+                <select class="time-day"   data-role="end"></select>
+                <select class="time-hour"  data-role="end"></select>
+              </div>
+            </div>
+          </div>
+
+          <div id="scheduleError" class="str-help" style="color:#dc2626;"></div>
+        </div>
+      </div>
+
+      <!-- Submit row -->
+      <div class="submit-row">
+        <button id="strategySubmit" class="submit-btn" disabled>Submit</button>
       </div>
     </div>
 
@@ -243,7 +347,6 @@
       <option value="10"></option>
     </datalist>
 
-    <!-- Scoped strategy styles (kept) -->
     <style>
       #strategyScreen .strategy-container{
         padding:12px;
@@ -259,7 +362,7 @@
         display:flex; flex-direction:column; min-height:260px;
       }
       #strategyScreen .str-card__header{
-        padding:12px 14px; border-bottom:1px solid #f2f3f5;
+        padding:12px 14px; border-bottom:1px solid #f3f4f6;
         font-weight:700; color:#111827; display:flex; align-items:center; justify-content:space-between;
       }
       #strategyScreen .str-card__body{ padding:12px; display:flex; flex-direction:column; gap:10px; }
@@ -287,22 +390,57 @@
       #strategyScreen .str-help{ margin-top:2px; font-size:12px; color:#6b7280; }
       @media (max-width:1000px){ #strategyScreen .strategy-container{ grid-template-columns:1fr; } }
     </style>
-
-    <!-- NOTE: removed the inline strategy script that previously conflicted with the price addRow -->
   </div>
 
   <div id="backtestScreen" class="screen">
-    <div class="center-screen">Backtest — Coming Soon</div>
+    <div class="backtest-wrap">
+      <div class="backtest-layout">
+        <!-- Left: 66% table -->
+        <div class="bt-left">
+          <table class="bt-table">
+            <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Summary</th>
+                  <th>P/L</th>
+                  <th>Stat</th>
+                  <th>Run</th> <!-- NEW -->
+                </tr>
+              </thead>
+              
+            <tbody id="btTbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Right: 33% details panel (hidden by default) -->
+        <div class="bt-right" id="btDetail" hidden>
+          <div class="bt-card">
+            <div class="bt-card-head">
+              <div id="btDetailTitle">Strategy details</div>
+              <button id="btDetailClose" class="bt-x" aria-label="Close">×</button>
+            </div>
+            <div class="bt-card-body" id="btDetailBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Strategies drawer (tab always visible) -->
+  <div class="drawer" id="strategyDrawer" aria-label="Saved strategies">
+    <div class="drawer-body">
+      <h3>Strategies</h3>
+      <div id="strategyList"></div>
+    </div>
+    <div class="drawer-tab" id="drawerToggleSide" title="Open/Close strategies">STRATEGIES</div>
   </div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
-
-<!-- keep one external strategy.js if you have it; defer load so it doesn't race -->
 <script defer src="strategy.js"></script>
 
 <script>
 (() => {
-  // view switching
+  // View switching
   const navBtns = document.querySelectorAll('.nav-btn');
   const screens = {
     viewer: document.getElementById('viewerScreen'),
@@ -318,11 +456,11 @@
     const btn = document.querySelector(`.nav-btn[data-view="${name}"]`);
     if (btn) btn.classList.add('active');
     topbarLeft.style.display = (name === 'viewer') ? 'flex' : 'none';
-    if (name === 'viewer') adjustViewerHeight();
+    if (name === 'viewer' || name === 'backtest') adjustViewerHeight();
   }
   navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-  // viewer height
+  // Layout height
   const navCard = document.querySelector('.nav-card');
   const topbar  = document.getElementById('topbar');
   const viewerLayout = document.getElementById('viewerLayout');
@@ -331,12 +469,12 @@
     const pad = 24;
     const h = Math.max(0, window.innerHeight - navCard.offsetHeight - topbar.offsetHeight - pad);
     document.documentElement.style.setProperty('--viewerHeight', h + 'px');
-    viewerLayout.style.height = 'var(--viewerHeight)';
+    if (viewerLayout) viewerLayout.style.height = 'var(--viewerHeight)';
   }
   window.addEventListener('resize', adjustViewerHeight);
   requestAnimationFrame(adjustViewerHeight);
 
-  // crypto dropdown
+  // Crypto switcher (header)
   const cryptoSelect = document.getElementById('cryptoSelect');
   const tickerEl = document.getElementById('ticker');
 
@@ -372,7 +510,7 @@
   }
   cryptoSelect.addEventListener('change', (e)=> changeCrypto(e.target.value));
 
-  // viewer/chart state
+  // Chart state
   let chart = null;
   let candleSeries = null;
   let overlaySeries = { ema12: null, ema26: null, bbUpper: null, bbLower: null };
@@ -423,12 +561,14 @@
     computeAndRenderIndicatorsFromCandles();
   }
 
-  // indicator math
+  // Indicator math
   function ema(values, span) {
     const k = 2 / (span + 1);
-    const out = []; let prev = null;
-    for (let i=0;i<values.length;i++) { const v=values[i]; prev = (prev===null? v : prev + k*(v-prev)); out.push(prev); }
-    return out;
+    for (let i=0, out=[], prev=null; i<values.length; i++){
+      const v=values[i]; prev = (prev===null? v : prev + k*(v-prev)); out.push(prev);
+      if (i===values.length-1) return out;
+    }
+    return [];
   }
   function rollingMean(values, w) {
     const out = new Array(values.length).fill(null); let sum=0;
@@ -467,14 +607,13 @@
     const bbLower = std20.map((s,i)=> s==null||sma20[i]==null? null : sma20[i] - 2*s);
 
     const ret = closes.map((v,i)=> i===0 ? 0 : Math.log(v / closes[i-1]));
-
     const rMean = rollingMean(ret, 20);
     const rStd  = rollingStd(ret, 20).map(s => (s==null || s === 0) ? 1e-12 : s);
     const zscore = ret.map((r,i)=> rMean[i]==null? null : (r - rMean[i]) / rStd[i]);
 
-    const rv = rollingStd(ret, 20);
     const secondsPerYear = 365 * 24 * 3600;
     const periodsPerYear = secondsPerYear / Math.max(1, currentIntervalSec);
+    const rv = rollingStd(ret, 20);
     const rvAnn = rv.map(v => v == null ? null : v * Math.sqrt(periodsPerYear));
 
     const mk = (vals) => times.map((t,i)=> vals[i]==null ? null : ({ time:t, value:vals[i] })).filter(Boolean);
@@ -489,10 +628,7 @@
     plotCanvasLineAligned('volCanvas',    times, rvAnn,  { color:'#fff', valueElId:'volVal', format:(v)=>formatVol(v) });
   }
 
-  function formatNumber(v, dp) {
-    if (v == null || !isFinite(v)) return '--';
-    return Number(v).toFixed(dp);
-  }
+  function formatNumber(v, dp) { if (v == null || !isFinite(v)) return '--'; return Number(v).toFixed(dp); }
   function formatVol(v){
     if (v == null || !isFinite(v)) return '--';
     const a = Math.abs(v);
@@ -574,7 +710,7 @@
 
     const last = defined[defined.length - 1].v;
     const valEl = document.getElementById(opts.valueElId || '');
-    if (valEl) valEl.textContent = (opts.format ? opts.format(last) : String(last));
+    if (valEl) { const t = (opts.format ? opts.format(last) : String(last)); valEl.textContent = t; }
 
     drawTimeLabels(canvas, times);
   }
@@ -606,31 +742,38 @@
     ctx.fillText(rightT, Math.max(rect.width - rightWidth - 6, 6), rect.height - labelHeight + 0);
   }
 
-  // update live tick
-  function updateLive(price, isoTs) {
-    if (!candleSeries) return;
-    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
-    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
-    const p = Number(price);
-    let c = candleBuckets.get(bucket);
-    if (!c) {
-      c = { time: bucket, open: p, high: p, low: p, close: p };
-      candleBuckets.set(bucket, c);
-      currentCandles.push(c);
-      candleSeries.update(c);
-    } else {
-      c.high = Math.max(c.high, p);
-      c.low = Math.min(c.low, p);
-      c.close = p;
-      candleSeries.update(c);
-      const idx = currentCandles.findIndex(cc => cc.time === c.time);
-      if (idx >= 0) currentCandles[idx] = c;
+  async function pollPriceOnce() {
+    try {
+      const res = await fetch('http://localhost:8000/api/price');
+      const d = await res.json();
+      document.getElementById('status').textContent = 'Connected - Live';
+      document.getElementById('status').style.color = 'green';
+      addRow(d);
+      updateLive(d.price, d.timestamp);
+    } catch(e) {
+      document.getElementById('status').textContent = 'Disconnected - retrying...';
+      document.getElementById('status').style.color = 'red';
     }
-
-    try { computeAndRenderIndicatorsFromCandles(); } catch (err) { console.warn('indicator recompute error', err); }
   }
 
-  // addRow for the price table — colored price cell based on delta
+  async function loadHistory(range='1h') {
+    try {
+      const params = { '1h':{m:60,res:'1',sec:60}, '1d':{m:24*60,res:'5',sec:300}, '1w':{m:7*24*60,res:'30',sec:1800}, '1m':{m:30*24*60,res:'60',sec:3600} }[range] || {m:60,res:'1',sec:60};
+      const url = `http://localhost:8000/api/history?minutes=${params.m}&resolution=${encodeURIComponent(params.res)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setHistory(data, params.sec);
+    } catch(e) { console.warn('history load failed', e); }
+  }
+
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
+      ev.target.classList.add('active');
+      await loadHistory(ev.target.dataset.range || '1h');
+    });
+  });
+
   function addRow(d) {
     if (!d || d.price == null) return;
     const tbody = document.getElementById('tbody');
@@ -656,40 +799,29 @@
     while (tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
   }
 
-  async function pollPriceOnce() {
-    try {
-      const res = await fetch('http://localhost:8000/api/price');
-      const d = await res.json();
-      document.getElementById('status').textContent = 'Connected - Live';
-      document.getElementById('status').style.color = 'green';
-      addRow(d);
-      updateLive(d.price, d.timestamp);
-    } catch(e) {
-      document.getElementById('status').textContent = 'Disconnected - retrying...';
-      document.getElementById('status').style.color = 'red';
+  function updateLive(price, isoTs) {
+    if (!candleSeries) return;
+    const tsSec = Math.floor(new Date(isoTs.replace(' ', 'T')).getTime()/1000);
+    const bucket = Math.floor(tsSec / resolutionSec) * resolutionSec;
+    const p = Number(price);
+    let c = candleBuckets.get(bucket);
+    if (!c) {
+      c = { time: bucket, open: p, high: p, low: p, close: p };
+      candleBuckets.set(bucket, c);
+      currentCandles.push(c);
+      candleSeries.update(c);
+    } else {
+      c.high = Math.max(c.high, p);
+      c.low = Math.min(c.low, p);
+      c.close = p;
+      candleSeries.update(c);
+      const idx = currentCandles.findIndex(cc => cc.time === c.time);
+      if (idx >= 0) currentCandles[idx] = c;
     }
+    try { computeAndRenderIndicatorsFromCandles(); } catch (err) { console.warn('indicator recompute error', err); }
   }
 
-  async function loadHistory(range='1h') {
-    try {
-      const params = { '1h':{m:60,res:'1',sec:60}, '1d':{m:24*60,res:'5',sec:300}, '1w':{m:7*24*60,res:'30',sec:1800}, '1m':{m:30*24*60,res:'60',sec:3600} }[range] || {m:60,res:'1',sec:60};
-      const url = `http://localhost:8000/api/history?minutes=${params.m}&resolution=${encodeURIComponent(params.res)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setHistory(data, params.sec);
-    } catch(e) { console.warn('history load failed', e); }
-  }
-
-  // timeframe buttons
-  document.querySelectorAll('.btn').forEach(btn => {
-    btn.addEventListener('click', async (ev) => {
-      document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
-      ev.target.classList.add('active');
-      await loadHistory(ev.target.dataset.range || '1h');
-    });
-  });
-
-  // init
+  // init viewer
   ensureChart();
   document.querySelector('.btn[data-range="1h"]').classList.add('active');
   loadCryptos();
@@ -699,68 +831,699 @@
 })();
 </script>
 
-<!-- Strategy UI behavior (delegated; keeps working even if DOM changes) -->
+<!-- Strategy UI behavior: commodities/buy/sell + schedule + submit/drawer -->
 <script>
 (function(){
-  if (!document.getElementById('qtySuggestions')) {
-    const dl = document.createElement('datalist');
-    dl.id = 'qtySuggestions';
-    dl.innerHTML = '<option value="1"></option><option value="5"></option><option value="10"></option>';
-    document.body.appendChild(dl);
+  // ----- DATA -----
+  const COINS = [
+    { key:'Bitcoin',  label:'Bitcoin'  },
+    { key:'Ethereum', label:'Ethereum' },
+    { key:'BNB',      label:'BNB'      },
+    { key:'XRP',      label:'XRP'      },
+    { key:'Cardano',  label:'Cardano'  },
+    { key:'Solana',   label:'Solana'   },
+    { key:'Dogecoin', label:'Dogecoin' },
+    { key:'Polygon',  label:'Polygon'  },
+    { key:'Litecoin', label:'Litecoin'  },
+    { key:'Avalanche',label:'Avalanche'}
+  ];
+
+  const INDICATORS = [
+    { key:'price',    label:'Price' },
+    { key:'ema12',    label:'EMA 12' },
+    { key:'ema26',    label:'EMA 26' },
+    { key:'bb_upper', label:'Bollinger Upper' },
+    { key:'bb_lower', label:'Bollinger Lower' },
+    { key:'zscore',   label:'Z-Score (returns)' },
+    { key:'rv',       label:'Realized Volatility' }
+  ];
+
+  function optionListFor(type){
+    return type === 'commodity' ? COINS : INDICATORS;
   }
 
-  function selectHTML(pre){
-    return `
-      <select class="str-select">
-        <option value="" ${pre ? '' : 'selected'} disabled>Select…</option>
-        <option value="a" ${pre==='a'?'selected':''}>a</option>
-        <option value="b" ${pre==='b'?'selected':''}>b</option>
-        <option value="c" ${pre==='c'?'selected':''}>c</option>
-      </select>
-    `;
+  function selectedKeysInCard(card, excludeRow=null){
+    const keys = new Set();
+    card.querySelectorAll('.str-row select.str-select').forEach(sel => {
+      const row = sel.closest('.str-row');
+      if (excludeRow && row === excludeRow) return;
+      const val = sel.value;
+      if (val) keys.add(val);
+    });
+    card.querySelectorAll('.str-row .str-pill[data-key]').forEach(pill => {
+      const row = pill.closest('.str-row');
+      if (excludeRow && row === excludeRow) return;
+      const k = pill.getAttribute('data-key');
+      if (k) keys.add(k);
+    });
+    return keys;
   }
-  function splitHTML(val, type){
+
+  function availableOptions(type, card, includeKey=null, excludeRow=null){
+    const all = optionListFor(type);
+    const picked = selectedKeysInCard(card, excludeRow);
+    return all.filter(opt => (opt.key === includeKey) || !picked.has(opt.key));
+  }
+
+  function selectHTML(type, card, preKey=null, excludeRow=null){
+    const opts = availableOptions(type, card, preKey, excludeRow);
+    const disabled = opts.length === 0 ? 'disabled' : '';
+    const optionsHTML = [
+      `<option value="" ${preKey ? '' : 'selected'} disabled>${opts.length ? 'Select…' : 'All options used'}</option>`,
+      ...opts.map(o => `<option value="${o.key}" ${o.key===preKey?'selected':''}>${o.label}</option>`)
+    ].join('');
+    return `<select class="str-select" ${disabled}>${optionsHTML}</select>`;
+  }
+
+  function splitHTML(opt){
     return `
       <div class="str-split">
-        <button type="button" class="str-pill" data-value="${val}" aria-label="${type} selection">${val}</button>
-        <input class="str-number" type="number" placeholder="Enter number" min="0" step="1" list="qtySuggestions" />
+        <button type="button" class="str-pill" data-key="${opt.key}" aria-label="selection">${opt.label}</button>
+        <input class="str-number" type="number" placeholder="Enter number" min="0" step="any" list="qtySuggestions" />
       </div>
     `;
   }
 
-  document.addEventListener('click', function(e){
-    const addBtn = e.target.closest('#strategyScreen .str-add, #strategy-content .str-add');
-    if (!addBtn) return;
-    const card   = addBtn.closest('.str-card');
-    const rowsEl = card.querySelector('.str-rows');
-    const type   = card.dataset.card;
-    const row    = document.createElement('div');
+  function addRow(type, rowsEl){
+    const card = rowsEl.closest('.str-card');
+    const row = document.createElement('div');
     row.className = 'str-row';
     row.dataset.type = type;
-    row.innerHTML = selectHTML();
+    row.innerHTML = selectHTML(type, card, null, row);
     rowsEl.appendChild(row);
+    updateAddButtonState(card);
+    if (typeof window.updateSubmitState === 'function') window.updateSubmitState();
+  }
+
+  function updateAddButtonState(card){
+    const type = card.dataset.card;
+    const btn  = card.querySelector('.str-add');
+    if (!btn) return;
+    const avail = availableOptions(type, card).length;
+    btn.disabled = (avail === 0);
+    btn.title = avail === 0 ? 'All options already selected' : '';
+  }
+
+  function findOptionByKey(type, key){
+    return optionListFor(type).find(o => o.key === key) || null;
+  }
+
+  function initializeRows(){
+    document.querySelectorAll('#strategyScreen .str-card').forEach(card => {
+      const type = card.dataset.card;
+      if (type === 'schedule') return; // skip schedule here
+      card.querySelectorAll('.str-row').forEach(row => {
+        row.dataset.type = type;
+        row.innerHTML = selectHTML(type, card, null, row);
+      });
+      updateAddButtonState(card);
+    });
+  }
+
+  // Add button
+  document.addEventListener('click', function(e){
+    const addBtn = e.target.closest('#strategyScreen .str-add');
+    if (!addBtn) return;
+    const card   = addBtn.closest('.str-card');
+    const type   = card.dataset.card;
+    if (type === 'schedule') return;
+    const rowsEl = card.querySelector('.str-rows');
+    addRow(type, rowsEl);
   });
 
+  // Change on select
   document.addEventListener('change', function(e){
-    const sel = e.target.closest('#strategyScreen .str-select, #strategy-content .str-select');
+    const sel = e.target.closest('#strategyScreen .str-select');
     if (!sel) return;
     const row  = sel.closest('.str-row');
+    const card = sel.closest('.str-card');
     const type = row?.dataset?.type;
+    if (!type || type === 'schedule') return;
     const val  = sel.value;
     if (!val) return;
+
+    const pickedElsewhere = selectedKeysInCard(card, row);
+    if (pickedElsewhere.has(val)) { sel.value = ''; sel.blur(); sel.focus(); return; }
+
     if (type === 'buy' || type === 'sell') {
-      row.innerHTML = splitHTML(val, type);
+      const opt = findOptionByKey(type, val);
+      if (!opt) return;
+      row.innerHTML = splitHTML(opt);
+    }
+    updateAddButtonState(card);
+    if (typeof window.updateSubmitState === 'function') window.updateSubmitState();
+  });
+
+  // Re-edit indicator/price
+  document.addEventListener('click', function(e){
+    const pill = e.target.closest('#strategyScreen .str-pill');
+    if (!pill) return;
+    const row   = pill.closest('.str-row');
+    const card  = pill.closest('.str-card');
+    const type  = row?.dataset?.type || 'buy';
+    row.innerHTML = selectHTML(type, card, pill.getAttribute('data-key') || null, row);
+    if (typeof window.updateSubmitState === 'function') window.updateSubmitState();
+  });
+
+  // Number input events affect validation
+  document.addEventListener('input', function(e){
+    if (e.target.matches('#strategyScreen .str-number')) {
+      if (typeof window.updateSubmitState === 'function') window.updateSubmitState();
     }
   });
 
-  document.addEventListener('click', function(e){
-    const pill = e.target.closest('#strategyScreen .str-pill, #strategy-content .str-pill');
-    if (!pill) return;
-    const row     = pill.closest('.str-row');
-    const type    = row?.dataset?.type || 'buy';
-    const current = pill.dataset.value || 'a';
-    row.innerHTML = selectHTML(current);
+  // ------------- Schedule -------------
+  (function scheduleInit(){
+    const card = document.getElementById('scheduleCard');
+    const errEl = document.getElementById('scheduleError');
+    const startCol = document.getElementById('startCol');
+    const endCol = document.getElementById('endCol');
+    const modeRadios = card.querySelectorAll('input[name="schedMode"]');
+
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    function now() { return new Date(); }
+    function roundDownToHour(d){ const x = new Date(d.getTime()); x.setMinutes(0,0,0); return x; }
+    function roundUpToNextHour(d){ const x = roundDownToHour(d); x.setHours(x.getHours() + 1); return x; }
+    function daysInMonth(y, m){ return new Date(y, m, 0).getDate(); } // m: 1-12
+
+    function getMode(){
+      const checked = Array.from(modeRadios).find(r => r.checked);
+      return (checked && checked.value) || 'backtest';
+    }
+
+    function getSelects(role){
+      return {
+        year:  card.querySelector(`.time-year[data-role="${role}"]`),
+        month: card.querySelector(`.time-month[data-role="${role}"]`),
+        day:   card.querySelector(`.time-day[data-role="${role}"]`),
+        hour:  card.querySelector(`.time-hour[data-role="${role}"]`)
+      };
+    }
+
+    function toDate(role){
+      const {year,month,day,hour} = getSelects(role);
+      const y = parseInt(year.value,10);
+      const m = parseInt(month.value,10);
+      const d = parseInt(day.value,10);
+      const h = parseInt(hour.value,10);
+      if ([y,m,d,h].some(v => Number.isNaN(v))) return null;
+      return new Date(y, m-1, d, h, 0, 0, 0);
+    }
+
+    function setSelectOptions(sel, items, selectedValue=null){
+      const prev = sel.value;
+      sel.innerHTML = items.map(({value,label,disabled}) => {
+        const dis = disabled ? ' disabled' : '';
+        const selAttr = (String(value) === String(selectedValue)) ? ' selected' : '';
+        return `<option value="${value}"${dis}${selAttr}>${label}</option>`;
+      }).join('');
+      if (prev && Array.from(sel.options).some(o => o.value === String(prev) && !o.disabled)) {
+        sel.value = prev;
+      } else if (selectedValue != null) {
+        sel.value = String(selectedValue);
+      } else {
+        const firstEnabled = Array.from(sel.options).find(o => !o.disabled);
+        if (firstEnabled) sel.value = firstEnabled.value;
+      }
+    }
+
+    function yearRange(){
+      const y = now().getFullYear();
+      return { min: y - 10, max: y + 2 };
+    }
+
+    function buildYearItems(mode){
+      const {min,max} = yearRange();
+      const cy = now().getFullYear();
+      const items = [];
+      for (let y=min; y<=max; y++){
+        let disabled = false;
+        if (mode === 'backtest' && y > cy) disabled = true;
+        if (mode === 'execute' && y < cy) disabled = true;
+        items.push({ value:y, label:String(y), disabled });
+      }
+      return items;
+    }
+
+    function buildMonthItems(mode, selectedYear){
+      const cm = now().getMonth()+1;
+      const cy = now().getFullYear();
+      const items = [];
+      for (let m=1; m<=12; m++){
+        let disabled = false;
+        if (mode === 'backtest' && selectedYear === cy && m > cm) disabled = true;
+        if (mode === 'execute' && selectedYear === cy && m < cm) disabled = true;
+        items.push({ value:m, label:monthNames[m-1], disabled });
+      }
+      return items;
+    }
+
+    function buildDayItems(mode, y, m){
+      const cd = now().getDate();
+      const cm = now().getMonth()+1;
+      const cy = now().getFullYear();
+      const dim = daysInMonth(y,m);
+      const items = [];
+      for (let d=1; d<=dim; d++){
+        let disabled = false;
+        if (mode === 'backtest' && y===cy && m===cm && d > cd) disabled = true;
+        if (mode === 'execute' && y===cy && m===cm && d < cd) disabled = true;
+        items.push({ value:d, label:String(d), disabled });
+      }
+      return items;
+    }
+
+    function buildHourItems(mode, y, m, d){
+      const ch = now().getHours();
+      const cm = now().getMonth()+1;
+      const cy = now().getFullYear();
+      const cd = now().getDate();
+      const items = [];
+      for (let h=0; h<=23; h++){
+        let disabled = false;
+        if (mode === 'backtest' && y===cy && m===cm && d===cd && h >= ch) disabled = true; // strictly past
+        if (mode === 'execute' && y===cy && m===cm && d===cd && h <= ch) disabled = true; // strictly future
+        items.push({ value:h, label: String(h).padStart(2,'0') + ':00', disabled });
+      }
+      return items;
+    }
+
+    function clampToValid(sel){
+      const curr = sel.value;
+      const opt = Array.from(sel.options).find(o => o.value === curr);
+      if (!opt || opt.disabled) {
+        const first = Array.from(sel.options).find(o => !o.disabled);
+        if (first) sel.value = first.value;
+      }
+    }
+
+    function refreshColumn(role){
+      const mode = getMode();
+      const {year,month,day,hour} = getSelects(role);
+
+      const yearItems = buildYearItems(mode);
+      setSelectOptions(year, yearItems, year.value || null);
+      clampToValid(year);
+
+      const y = parseInt(year.value,10);
+
+      const monthItems = buildMonthItems(mode, y);
+      setSelectOptions(month, monthItems, month.value || null);
+      clampToValid(month);
+
+      const m = parseInt(month.value,10);
+
+      const dayItems = buildDayItems(mode, y, m);
+      setSelectOptions(day, dayItems, day.value || null);
+      clampToValid(day);
+
+      const d = parseInt(day.value,10);
+
+      const hourItems = buildHourItems(mode, y, m, d);
+      setSelectOptions(hour, hourItems, hour.value || null);
+      clampToValid(hour);
+    }
+
+    function setColumnFromDate(role, dt){
+      refreshColumn(role);
+      const {year,month,day,hour} = getSelects(role);
+      year.value  = String(dt.getFullYear()); clampToValid(year);  refreshColumn(role);
+      month.value = String(dt.getMonth()+1);  clampToValid(month); refreshColumn(role);
+      day.value   = String(dt.getDate());     clampToValid(day);   refreshColumn(role);
+      hour.value  = String(dt.getHours());    clampToValid(hour);  refreshColumn(role);
+    }
+
+    function validateAll(){
+      const mode = getMode();
+      refreshColumn('start');
+      refreshColumn('end');
+
+      const s = toDate('start');
+      const e = toDate('end');
+      const n = now();
+
+      let msg = '';
+      let invalidStart = false;
+      let invalidEnd = false;
+
+      if (!s || !e) {
+        msg = 'Pick a complete Start and End (year, month, day, hour).';
+      } else {
+        if (s >= e) { msg = 'Start must be earlier than End.'; invalidStart = true; invalidEnd = true; }
+        if (mode === 'backtest') {
+          if (s >= n || e >= n) { msg = 'For Backtest, both Start and End must be in the past.'; invalidStart = s >= n; invalidEnd = e >= n; }
+        } else {
+          if (s <= n || e <= n) { msg = 'For Execute, both Start and End must be in the future.'; invalidStart = s <= n; invalidEnd = e <= n; }
+        }
+      }
+
+      errEl.textContent = msg;
+      startCol.classList.toggle('invalid', invalidStart);
+      endCol.classList.toggle('invalid', invalidEnd);
+
+      if (typeof window.updateSubmitState === 'function') window.updateSubmitState();
+    }
+
+    function setDefaultsForMode(){
+      const n = now();
+      const mode = getMode();
+      let start, end;
+      if (mode === 'backtest') {
+        const end0 = roundDownToHour(n); end0.setHours(end0.getHours() - 1);
+        const start0 = new Date(end0.getTime()); start0.setHours(start0.getHours() - 24);
+        start = start0; end = end0;
+      } else {
+        const start0 = roundUpToNextHour(n);
+        const end0 = new Date(start0.getTime()); end0.setHours(end0.getHours() + 1);
+        start = start0; end = end0;
+      }
+      setColumnFromDate('start', start);
+      setColumnFromDate('end', end);
+      validateAll();
+    }
+
+    // expose schedule helpers
+    window.__sched = {
+      getMode,
+      getStart: () => toDate('start'),
+      getEnd:   () => toDate('end'),
+      isValid:  () => errEl.textContent.trim() === ''
+    };
+
+    modeRadios.forEach(r => r.addEventListener('change', setDefaultsForMode));
+
+    ['start','end'].forEach(role => {
+      const {year,month,day,hour} = getSelects(role);
+      [year,month,day,hour].forEach(sel => {
+        sel.addEventListener('change', () => { refreshColumn(role); validateAll(); });
+      });
+    });
+
+    refreshColumn('start'); refreshColumn('end'); setDefaultsForMode();
+  })();
+
+  // ---------- Submit + Drawer ----------
+  const submitBtn       = document.getElementById('strategySubmit');
+  const drawer          = document.getElementById('strategyDrawer');
+  const drawerToggleSide= document.getElementById('drawerToggleSide');
+  const listEl          = document.getElementById('strategyList');
+  let strategies = [];
+  let counter = 0;
+
+  function setDrawer(open){
+    drawer.classList.toggle('open', open);
+  }
+  // Toggle the drawer by clicking the always-visible vertical tab
+  drawerToggleSide.addEventListener('click', () => setDrawer(!drawer.classList.contains('open')));
+
+  function isCommodityValid(){
+    const card = document.querySelector('#strategyScreen .str-card[data-card="commodity"]');
+    const rows = Array.from(card.querySelectorAll('.str-row'));
+    const picked = rows.map(row => {
+      const sel = row.querySelector('.str-select');
+      const pill= row.querySelector('.str-pill');
+      return sel?.value || pill?.getAttribute('data-key') || null;
+    }).filter(Boolean);
+    return picked.length > 0;
+  }
+
+  function areConditionsValid(type){
+    const card = document.querySelector(`#strategyScreen .str-card[data-card="${type}"]`);
+    const rows = Array.from(card.querySelectorAll('.str-row'));
+    if (rows.length === 0) return false;
+    for (const row of rows){
+      const pill = row.querySelector('.str-pill');
+      const num  = row.querySelector('.str-number');
+      if (!pill || !num) return false;
+      const v = num.value.trim();
+      if (v === '' || isNaN(parseFloat(v))) return false;
+    }
+    return true;
+  }
+
+  function scheduleValid(){ return window.__sched && window.__sched.isValid(); }
+
+  function gatherCommodity(){
+    const card = document.querySelector('#strategyScreen .str-card[data-card="commodity"]');
+    const rows = Array.from(card.querySelectorAll('.str-row'));
+    const vals = rows.map(row => {
+      const pill = row.querySelector('.str-pill');
+      const sel  = row.querySelector('.str-select');
+      const key  = pill?.getAttribute('data-key') || sel?.value || null;
+      if (!key) return null;
+      const obj = COINS.find(c => c.key === key);
+      return obj ? obj.label : key;
+    }).filter(Boolean);
+    return vals;
+  }
+
+  function gatherConditions(type){
+    const card = document.querySelector(`#strategyScreen .str-card[data-card="${type}"]`);
+    const rows = Array.from(card.querySelectorAll('.str-row'));
+    return rows.map(row => {
+      const pill = row.querySelector('.str-pill');
+      const num  = row.querySelector('.str-number');
+      const key  = pill?.getAttribute('data-key');
+      const ind  = INDICATORS.find(i => i.key === key);
+      return ind && num ? { key, label: ind.label, value: parseFloat(num.value) } : null;
+    }).filter(Boolean);
+  }
+
+  function gatherSchedule(){
+    return {
+      mode:  window.__sched.getMode(),
+      start: window.__sched.getStart()?.toISOString() || null,
+      end:   window.__sched.getEnd()?.toISOString()   || null
+    };
+  }
+
+  function renderStrategies(){
+    listEl.innerHTML = strategies.map(s => {
+      const coinStr = s.coins.join(', ');
+      const buyStr  = s.buy.map(b => `${b.label}: ${b.value}`).join(' · ');
+      const sellStr = s.sell.map(b => `${b.label}: ${b.value}`).join(' · ');
+      const start   = s.schedule.start ? new Date(s.schedule.start).toLocaleString() : '--';
+      const end     = s.schedule.end   ? new Date(s.schedule.end).toLocaleString()   : '--';
+      return `
+        <div class="strategy-card">
+          <div class="title">Strategy #${s.id}</div>
+          <div class="kv"><strong>Coins:</strong> ${coinStr || '--'}</div>
+          <div class="kv"><strong>Buy:</strong> ${buyStr || '--'}</div>
+          <div class="kv"><strong>Sell:</strong> ${sellStr || '--'}</div>
+          <div class="kv"><strong>Mode:</strong> ${s.schedule.mode}</div>
+          <div class="kv"><strong>Start:</strong> ${start}</div>
+          <div class="kv"><strong>End:</strong> ${end}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function tryEnableSubmit(){
+    const ok = isCommodityValid() && areConditionsValid('buy') && areConditionsValid('sell') && scheduleValid();
+    submitBtn.disabled = !ok;
+  }
+  window.updateSubmitState = tryEnableSubmit;
+
+  submitBtn.addEventListener('click', () => {
+    if (submitBtn.disabled) return;
+    const strategy = {
+      id: ++counter,
+      coins: gatherCommodity(),
+      buy:   gatherConditions('buy'),
+      sell:  gatherConditions('sell'),
+      schedule: gatherSchedule()
+    };
+    strategies.push(strategy);
+    renderStrategies();
+    setDrawer(true); // open drawer to show it
+    tryEnableSubmit();
+    _refreshBacktestIfReady(); // keep backtest table in sync
   });
+
+  // Boot the three cards
+  initializeRows();
+
+  // Keep add buttons in sync
+  const obs = new MutationObserver(() => {
+    document.querySelectorAll('#strategyScreen .str-card').forEach(updateAddButtonState);
+    tryEnableSubmit();
+  });
+  obs.observe(document.getElementById('strategyScreen'), { childList:true, subtree:true });
+
+  // initial submit state
+  tryEnableSubmit();
+
+  // ---- Backtest UI (scoped in this IIFE so it can see `strategies`) ----
+  function summarizeStrategy(s){
+    const coins = s.coins.join(', ');
+    const buy   = s.buy.map(b=> `${b.label}:${b.value}`).join(' | ');
+    const sell  = s.sell.map(b=> `${b.label}:${b.value}`).join(' | ');
+    const start = s.schedule.start ? new Date(s.schedule.start).toLocaleString() : '--';
+    const end   = s.schedule.end   ? new Date(s.schedule.end).toLocaleString()   : '--';
+    return `Coins: ${coins} · Buy: ${buy || '--'} · Sell: ${sell || '--'} · ${s.schedule.mode} ${start} → ${end}`;
+  }
+
+  function initBacktestUI(){
+    const tbody  = document.getElementById('btTbody');
+    const detail = document.getElementById('btDetail');
+    const close  = document.getElementById('btDetailClose');
+    const dtitle = document.getElementById('btDetailTitle');
+    const dbody  = document.getElementById('btDetailBody');
+
+    if (!tbody) return; // backtest screen not in DOM yet
+
+    function showDetail(s){
+      if (!s) return;
+      dtitle.textContent = `Strategy #${s.id} details`;
+      dbody.innerHTML = `
+        <div class="kv"><strong>Coins:</strong> ${s.coins.join(', ') || '--'}</div>
+        <div class="kv"><strong>Buy:</strong> ${s.buy.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+        <div class="kv"><strong>Sell:</strong> ${s.sell.map(b=> `${b.label}: ${b.value}`).join(' · ') || '--'}</div>
+        <div class="kv"><strong>Mode:</strong> ${s.schedule.mode}</div>
+        <div class="kv"><strong>Start:</strong> ${s.schedule.start ? new Date(s.schedule.start).toLocaleString() : '--'}</div>
+        <div class="kv"><strong>End:</strong> ${s.schedule.end ? new Date(s.schedule.end).toLocaleString() : '--'}</div>
+        <hr>
+        <p>Random notes: backtest engine wiring TBD. Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+      `;
+      detail.hidden = false;
+    }
+
+    function refreshTable(){
+  tbody.innerHTML = strategies.map(s=>{
+    const summary = summarizeStrategy(s);
+    return `<tr data-id="${s.id}">
+      <td>#${s.id}</td>
+      <td><div class="bt-summary">${summary}</div></td>
+      <td class="bt-pl">…</td>
+      <td>Active</td>
+      <td><button type="button" class="bt-x bt-run">Run</button></td> <!-- NEW -->
+    </tr>`;
+  }).join('');
+  // Optional: keep auto-calc; leave it if you want, or comment it out to rely only on the button.
+  // computePLForRows();
+}
+async function runPLForRow(row){
+  const id = Number(row.getAttribute('data-id'));
+  const s = strategies.find(x => x.id === id);
+  const plCell = row.querySelector('.bt-pl');
+  const runBtn = row.querySelector('.bt-run');
+  if (!s || !plCell || !runBtn) return;
+
+  // Disable button and show activity
+  runBtn.disabled = true;
+  const prevText = runBtn.textContent;
+  runBtn.textContent = 'Running…';
+
+  const payload = {
+    coin: (s.coins && s.coins[0]) || 'Bitcoin',
+    buy:  s.buy || [],
+    sell: s.sell || [],
+    start: s.schedule?.start || null,
+    end:   s.schedule?.end   || null
+  };
+
+  try {
+    const res = await fetch('http://localhost:8000/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data && typeof data.pl_pct === 'number'){
+      const v = Number(data.pl_pct);
+      plCell.textContent = `${v.toFixed(2)}%`;
+      plCell.style.color = v >= 0 ? '#16a34a' : '#dc2626';
+    } else {
+      plCell.textContent = '—';
+      plCell.removeAttribute('style');
+    }
+  } catch (e) {
+    plCell.textContent = '—';
+    plCell.removeAttribute('style');
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = prevText;
+  }
+}
+
+async function computePLForRows(){
+  const rows = tbody.querySelectorAll('tr[data-id]');
+  for (const row of rows){
+    const id = Number(row.getAttribute('data-id'));
+    const s = strategies.find(x => x.id === id);
+    const plCell = row.querySelector('.bt-pl');
+    if (!s || !plCell) continue;
+
+    const payload = {
+      coin: (s.coins && s.coins[0]) || 'Bitcoin',
+      buy:  s.buy || [],
+      sell: s.sell || [],
+      start: s.schedule?.start || null,
+      end:   s.schedule?.end   || null
+    };
+
+    try {
+      const res = await fetch('http://localhost:8000/api/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data && typeof data.pl_pct === 'number'){
+        const v = Number(data.pl_pct);
+        plCell.textContent = `${v.toFixed(2)}%`;
+        plCell.style.color = v >= 0 ? '#16a34a' : '#dc2626';
+      } else {
+        plCell.textContent = '—';
+        plCell.removeAttribute('style');
+      }
+    } catch {
+      plCell.textContent = '—';
+      plCell.removeAttribute('style');
+    }
+  }
+}
+
+
+tbody.addEventListener('click', (e)=>{
+  // If the click was on the Run button, handle and stop here
+  const run = e.target.closest('.bt-run');
+  if (run){
+    e.preventDefault();
+    e.stopPropagation();
+    const row = run.closest('tr[data-id]');
+    if (row) runPLForRow(row);
+    return;
+  }
+
+  // Otherwise, treat it as a row click to open the details panel
+  const row = e.target.closest('tr[data-id]');
+  if (!row) return;
+  const id = Number(row.getAttribute('data-id'));
+  const s = strategies.find(x=> x.id === id);
+  if (s) showDetail(s);
+});
+
+
+    close && close.addEventListener('click', ()=> { detail.hidden = true; });
+
+    // initial render
+    refreshTable();
+
+    // small internal hook so we can refresh after submissions
+    window.__btRefresh = { refreshTable, showDetail };
+  }
+
+  // init when DOM is ready
+  document.addEventListener('DOMContentLoaded', initBacktestUI);
+
+  // Called after a new strategy is submitted (safe no-op if backtest not initialized yet)
+  function _refreshBacktestIfReady(){
+    if (window.__btRefresh){
+      window.__btRefresh.refreshTable();
+    }
+  }
 })();
 </script>
 
