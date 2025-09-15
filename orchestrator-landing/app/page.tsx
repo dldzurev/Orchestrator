@@ -184,7 +184,7 @@ export default function HomePage() {
             className="bg-black text-white hover:bg-gray-800 px-8 py-3 text-lg font-medium"
             onClick={() => {
               if (typeof window !== 'undefined') {
-                window.open('../frontend/index.html', '_blank');
+                window.open('http://localhost:8080', '_blank');
               }
             }}
           >
@@ -365,16 +365,28 @@ export default function HomePage() {
           </div>
           <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400 text-sm">&copy; 2024 ORCHESTRATOR. All rights reserved.</p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
-              <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
-                Privacy
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
-                Terms
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
-                Security
-              </a>
+            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 mt-4 md:mt-0">
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.open('http://localhost:8080/logs.html', '_blank');
+                  }
+                }}
+                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
+              >
+                📊 View Backend Logs
+              </button>
+              <div className="flex space-x-6">
+                <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Privacy
+                </a>
+                <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Terms
+                </a>
+                <a href="#" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Security
+                </a>
+              </div>
             </div>
           </div>
         </div>

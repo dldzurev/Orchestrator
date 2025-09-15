@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orchestrator Backend Logs</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        
+        .header {
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 2px solid #00ff00;
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #00ff00;
+            text-align: center;
+            font-size: 24px;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            color: #00ff00;
+        }
+        
+        .status.disconnected {
+            color: #ff0000;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            background-color: #2d2d2d;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 10px 20px;
+            margin: 0 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background-color: #00ff00;
+            color: #1a1a1a;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .logs-container {
+            background-color: #0d1117;
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            padding: 20px;
+            height: 70vh;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .log-line {
+            margin: 2px 0;
+            padding: 2px 0;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        
+        .log-line.real-data {
+            color: #00ff00;
+        }
+        
+        .log-line.mock-data {
+            color: #ff6b6b;
+        }
+        
+        .log-line.error {
+            color: #ff0000;
+        }
+        
+        .log-line.warning {
+            color: #ffaa00;
+        }
+        
+        .log-line.info {
+            color: #00aaff;
+        }
+        
+        .log-line.success {
+            color: #00ff88;
+        }
+        
+        .auto-scroll {
+            position: sticky;
+            top: 0;
+            background-color: #2d2d2d;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .auto-scroll label {
+            color: #00ff00;
+            cursor: pointer;
+        }
+        
+        .auto-scroll input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .connection-info {
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+        }
+        
+        .connection-info h3 {
+            margin: 0 0 10px 0;
+            color: #00ff00;
+        }
+        
+        .connection-info p {
+            margin: 5px 0;
+            color: #ccc;
+        }
+        
+        .timestamp {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .no-logs {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 ORCHESTRATOR BACKEND LOGS</h1>
+        <div class="status" id="status">Connecting to backend...</div>
+    </div>
+    
+    <div class="connection-info">
+        <h3>📡 Connection Info</h3>
+        <p><strong>Backend URL:</strong> http://localhost:8000</p>
+        <p><strong>Logs Endpoint:</strong> /api/logs</p>
+        <p><strong>Last Update:</strong> <span id="lastUpdate">Never</span></p>
+        <p><strong>Total Log Lines:</strong> <span id="totalLines">0</span></p>
+    </div>
+    
+    <div class="controls">
+        <button class="btn" id="refreshBtn">🔄 Refresh Logs</button>
+        <button class="btn" id="clearBtn">🗑️ Clear Display</button>
+        <button class="btn" id="pauseBtn">⏸️ Pause Auto-Refresh</button>
+        <button class="btn" id="exportBtn">💾 Export Logs</button>
+    </div>
+    
+    <div class="auto-scroll">
+        <label>
+            <input type="checkbox" id="autoScroll" checked>
+            Auto-scroll to bottom
+        </label>
+    </div>
+    
+    <div class="logs-container" id="logsContainer">
+        <div class="no-logs">No logs available. Make sure the backend is running on port 8000.</div>
+    </div>
+
+    <script>
+        let isPaused = false;
+        let autoRefreshInterval;
+        let logs = [];
+        
+        const statusEl = document.getElementById('status');
+        const logsContainer = document.getElementById('logsContainer');
+        const lastUpdateEl = document.getElementById('lastUpdate');
+        const totalLinesEl = document.getElementById('totalLines');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const autoScrollCheckbox = document.getElementById('autoScroll');
+        
+        function updateStatus(message, type = 'info') {
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+        
+        function updateLastUpdate() {
+            lastUpdateEl.textContent = new Date().toLocaleTimeString();
+        }
+        
+        function updateTotalLines() {
+            totalLinesEl.textContent = logs.length;
+        }
+        
+        function getLogLineClass(line) {
+            if (line.includes('[REAL DATA]') || line.includes('✅')) {
+                return 'real-data';
+            } else if (line.includes('[MOCK DATA]') || line.includes('🔴')) {
+                return 'mock-data';
+            } else if (line.includes('❌') || line.includes('ERROR')) {
+                return 'error';
+            } else if (line.includes('⚠️') || line.includes('WARNING')) {
+                return 'warning';
+            } else if (line.includes('✅') || line.includes('SUCCESS')) {
+                return 'success';
+            } else if (line.includes('📡') || line.includes('🚀')) {
+                return 'info';
+            }
+            return '';
+        }
+        
+        function renderLogs() {
+            if (logs.length === 0) {
+                logsContainer.innerHTML = '<div class="no-logs">No logs available. Make sure the backend is running on port 8000.</div>';
+                return;
+            }
+            
+            const html = logs.map(line => {
+                const className = getLogLineClass(line);
+                return `<div class="log-line ${className}">${line}</div>`;
+            }).join('');
+            
+            logsContainer.innerHTML = html;
+            
+            if (autoScrollCheckbox.checked) {
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+        }
+        
+        async function fetchLogs() {
+            try {
+                const response = await fetch('http://localhost:8000/api/logs?limit=500');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                logs = data.lines || [];
+                updateStatus('Connected to backend', 'connected');
+                updateLastUpdate();
+                updateTotalLines();
+                renderLogs();
+            } catch (error) {
+                updateStatus(`Connection failed: ${error.message}`, 'disconnected');
+                logs = [`[${new Date().toLocaleTimeString()}] Connection error: ${error.message}`];
+                updateLastUpdate();
+                updateTotalLines();
+                renderLogs();
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                if (!isPaused) {
+                    fetchLogs();
+                }
+            }, 2000); // Refresh every 2 seconds
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+        
+        function exportLogs() {
+            const logText = logs.join('\n');
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `orchestrator-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        // Event listeners
+        refreshBtn.addEventListener('click', fetchLogs);
+        
+        clearBtn.addEventListener('click', () => {
+            logs = [];
+            renderLogs();
+            updateTotalLines();
+        });
+        
+        pauseBtn.addEventListener('click', () => {
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? '▶️ Resume Auto-Refresh' : '⏸️ Pause Auto-Refresh';
+            pauseBtn.style.backgroundColor = isPaused ? '#ff6b6b' : '#2d2d2d';
+        });
+        
+        exportBtn.addEventListener('click', exportLogs);
+        
+        // Initial load
+        fetchLogs();
+        startAutoRefresh();
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopAutoRefresh);
+    </script>
+</body>
+</html>

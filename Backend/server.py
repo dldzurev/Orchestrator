@@ -62,6 +62,69 @@ current_price = {
     "crypto": "Bitcoin",
 }
 
+# Fallback price generation when WebSocket fails
+import random
+import threading
+import time as time_module
+
+# Track data source
+data_source = "unknown"  # "realtime", "fallback", or "unknown"
+
+def generate_fallback_price():
+    """Generate realistic price movements when WebSocket fails"""
+    global data_source
+    data_source = "fallback"
+    
+    base_prices = {
+        "Bitcoin": 115700.0,
+        "Ethereum": 4200.0,
+        "BNB": 600.0,
+        "XRP": 1.20,
+        "Cardano": 2.50,
+        "Solana": 180.0,
+        "Dogecoin": 0.35,
+        "Polygon": 2.10,
+        "Litecoin": 180.0,
+        "Avalanche": 85.0,
+    }
+    
+    base_price = base_prices.get(current_crypto_name, 100.0)
+    if current_price.get("price"):
+        try:
+            base_price = float(current_price["price"])
+        except Exception:
+            pass
+    
+    # Generate realistic price movement (-2% to +2% range)
+    change_percent = random.uniform(-2.0, 2.0)
+    new_price = base_price * (1 + change_percent / 100)
+    
+    # Calculate delta and percent change
+    delta = new_price - base_price
+    percent_change = (delta / base_price) * 100.0
+    
+    # Update current price
+    current_price.update({
+        "price": round(new_price, 2),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "delta": round(delta, 2),
+        "percent_change": round(percent_change, 2),
+        "crypto": current_crypto_name,
+    })
+    
+    arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "→")
+    print(f"🔴 [MOCK DATA] [{current_price['timestamp']}] {current_crypto_name} ${new_price:.2f}  {arrow} {delta:+.2f} ({percent_change:+.2f}%) - WebSocket Failed, Using Simulated Data")
+
+def start_fallback_price_generation():
+    """Start fallback price generation in a separate thread"""
+    def fallback_loop():
+        while True:
+            time_module.sleep(2)  # Update every 2 seconds
+            generate_fallback_price()
+    
+    fallback_thread = threading.Thread(target=fallback_loop, daemon=True)
+    fallback_thread.start()
+
 # Ring buffer of last printed log lines (exactly what is printed to terminal)
 log_lines = deque(maxlen=500)
 log_lock = Lock()
@@ -105,7 +168,16 @@ def _start_streaming_thread_once():
 
 @app.on_event("startup")
 async def _on_startup():
+    print("=" * 60)
+    print("🚀 ORCHESTRATOR BACKEND STARTING...")
+    print("=" * 60)
+    print("📡 Attempting to connect to Finnhub WebSocket for real-time data...")
+    print("🔄 Fallback simulation will start if WebSocket fails")
+    print("=" * 60)
+    
     _start_streaming_thread_once()
+    # Start fallback price generation as backup
+    start_fallback_price_generation()
 
 
 def fetch_crypto_price(ticker: str) -> Optional[float]:
@@ -678,20 +750,24 @@ def stream_bitcoin_prices() -> None:
 
     def on_open(ws):  # type: ignore
         """Subscribe to the current symbol on open."""
-        global ws_app, current_subscribed_symbol
+        global ws_app, current_subscribed_symbol, data_source
         with ws_lock:
             ws_app = ws
         try:
             subscribe_msg = {"type": "subscribe", "symbol": current_ticker}
             ws.send(json.dumps(subscribe_msg))
             current_subscribed_symbol = current_ticker
-            log_line(f"Subscribed to {current_crypto_name} trade stream on Finnhub")
+            data_source = "realtime"
+            print("✅ SUCCESS: Connected to Finnhub WebSocket - Using REAL MARKET DATA")
+            log_line(f"✅ Connected to {current_crypto_name} trade stream on Finnhub - REAL DATA")
         except Exception as e:
-            log_line(f"WS on_open subscribe error: {e}")
+            print("❌ ERROR: Failed to subscribe to WebSocket - Will use MOCK DATA")
+            log_line(f"❌ WS on_open subscribe error: {e}")
 
     def on_message(ws, message):  # type: ignore
         nonlocal last_price
-        global current_price
+        global current_price, data_source
+        data_source = "realtime"
         try:
             payload = json.loads(message)
         except Exception:
@@ -719,9 +795,9 @@ def stream_bitcoin_prices() -> None:
                 delta = price - last_price
                 percent_change = (delta / last_price) * 100.0
                 arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "→")
-                log_line(f"[{ts_str}] {current_crypto_name} ${price:.2f}  {arrow} {delta:+.2f} ({percent_change:+.2f}%)")
+                log_line(f"🟢 [REAL DATA] [{ts_str}] {current_crypto_name} ${price:.2f}  {arrow} {delta:+.2f} ({percent_change:+.2f}%) - Live Market Data from Finnhub")
             else:
-                log_line(f"[{ts_str}] {current_crypto_name} ${price:.2f}")
+                log_line(f"🟢 [REAL DATA] [{ts_str}] {current_crypto_name} ${price:.2f} - Live Market Data from Finnhub")
 
             # Update global price data
             current_price.update(
@@ -748,16 +824,23 @@ def stream_bitcoin_prices() -> None:
             last_price = price
 
     def on_error(ws, error):  # type: ignore
+        global data_source
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_line(f"[{ts}] WebSocket error for {current_crypto_name}: {error}")
+        data_source = "fallback"
+        print("❌ WEBSOCKET ERROR: Switching to MOCK DATA")
+        log_line(f"❌ [{ts}] WebSocket error for {current_crypto_name}: {error} - Switching to MOCK DATA")
+        # Start fallback price generation when WebSocket fails
+        start_fallback_price_generation()
 
     def on_close(ws, status_code, msg):  # type: ignore
-        global ws_app, current_subscribed_symbol
+        global ws_app, current_subscribed_symbol, data_source
         with ws_lock:
             ws_app = None
             current_subscribed_symbol = None
+        data_source = "fallback"
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_line(f"[{ts}] WebSocket closed for {current_crypto_name} (code={status_code}, msg={msg})")
+        print("⚠️  WEBSOCKET CLOSED: Switching to MOCK DATA")
+        log_line(f"⚠️  [{ts}] WebSocket closed for {current_crypto_name} (code={status_code}, msg={msg}) - Switching to MOCK DATA")
 
     backoff_seconds = 1
     while True:
