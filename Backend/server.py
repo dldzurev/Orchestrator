@@ -31,8 +31,8 @@ from indicators import indicator_calc
 # Configuration / Globals
 # -----------------------
 
-# NOTE: per your request, the API key remains hard-coded here.
-API_KEY = "d32dvl1r01qn0gi3ief0d32dvl1r01qn0gi3iefg"
+
+API_KEY = "--"
 finnhub_client = finnhub.Client(api_key=API_KEY)
 
 # Supported crypto tickers for Finnhub API
