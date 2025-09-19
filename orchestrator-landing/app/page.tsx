@@ -173,7 +173,7 @@ export default function HomePage() {
         </div>
 
         <p className="text-xl md:text-2xl text-gray-600 text-center max-w-2xl mb-12 font-light">
-          No-code trading platform for equities, crypto, and forex. Trade like a quant/HFT with institutional-grade
+          No-code backtesting trading platform for equities, crypto, and forex. Test, trade and profit like a quant/HFT with institutional-grade
           tools.
         </p>
 
